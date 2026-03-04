@@ -13,6 +13,11 @@ export class CreateTaskInput {
     @IsString()
     projectId: string;
 
+    @Field({ nullable: true })
+    @IsOptional()
+    @IsString()
+    listId?: string;
+
     @Field()
     @IsNotEmpty()
     @IsString()
@@ -113,6 +118,11 @@ export class TaskFiltersInput {
     @IsString()
     assignedToId?: string;
 
+    @Field({ nullable: true })
+    @IsOptional()
+    @IsString()
+    listId?: string;
+
     @Field(() => TaskStatus, { nullable: true })
     @IsOptional()
     @IsEnum(TaskStatus)
@@ -149,6 +159,9 @@ export class TaskType {
 
     @Field()
     projectId: string;
+
+    @Field({ nullable: true })
+    listId?: string;
 
     @Field()
     title: string;

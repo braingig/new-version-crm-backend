@@ -10,6 +10,7 @@ export class TasksService {
         userId: string,
         data: {
             projectId: string;
+            listId?: string;
             title: string;
             description?: string;
             priority: TaskPriority;
@@ -58,6 +59,7 @@ export class TasksService {
 
     async findAll(filters?: {
         projectId?: string;
+        listId?: string;
         assignedToId?: string;
         status?: TaskStatus;
         priority?: TaskPriority;
@@ -66,6 +68,7 @@ export class TasksService {
             where: {
                 parentTaskId: null, // Only get parent tasks
                 ...(filters?.projectId && { projectId: filters.projectId }),
+                ...(filters?.listId && { listId: filters.listId }),
                 ...(filters?.assignedToId && { assignedToId: filters.assignedToId }),
                 ...(filters?.status && { status: filters.status }),
                 ...(filters?.priority && { priority: filters.priority }),

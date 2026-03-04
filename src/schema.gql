@@ -44,11 +44,19 @@ input CreateTaskInput {
   description: String
   dueDate: DateTime
   estimatedTime: Float
+  listId: String
   parentTaskId: String
   priority: TaskPriority!
   projectId: String!
   startDate: DateTime
   title: String!
+}
+
+input CreateTaskListInput {
+  description: String
+  name: String!
+  order: Float
+  projectId: String!
 }
 
 """
@@ -86,8 +94,10 @@ type Mutation {
   createProject(input: CreateProjectInput!): ProjectType!
   createSale(input: CreateSaleInput!): Sale!
   createTask(input: CreateTaskInput!): TaskType!
+  createTaskList(input: CreateTaskListInput!): TaskListType!
   deleteProject(id: String!): Boolean!
   deleteTask(id: String!): Boolean!
+  deleteTaskList(id: String!): Boolean!
   deleteUser(id: String!): Boolean!
   generatePayroll(employeeId: String!, month: DateTime!): Boolean!
   login(input: LoginInput!): AuthResponse!
@@ -100,6 +110,7 @@ type Mutation {
   updateEmployeeWorkType(workType: String!): EmployeeType!
   updateProject(id: String!, input: UpdateProjectInput!): ProjectType!
   updateTask(id: String!, input: UpdateTaskInput!): TaskType!
+  updateTaskList(id: String!, input: UpdateTaskListInput!): TaskListType!
   updateUser(id: String!, input: UpdateUserInput!): UserType!
 }
 
@@ -165,6 +176,7 @@ type Query {
   projects(filters: ProjectFiltersInput): [ProjectType!]!
   sales(assignedToId: String): [Sale!]!
   task(id: String!): TaskType!
+  taskLists(projectId: String!): [TaskListType!]!
   tasks(filters: TaskFiltersInput): [TaskType!]!
   tasksForSelection(filters: TaskFiltersInput): [TaskType!]!
   timeEntries(employeeId: String, taskId: String, taskIds: [String!]): [TimeEntryType!]!
@@ -224,9 +236,20 @@ input StartTimeEntryInput {
 
 input TaskFiltersInput {
   assignedToId: String
+  listId: String
   priority: TaskPriority
   projectId: String
   status: TaskStatus
+}
+
+type TaskListType {
+  createdAt: DateTime!
+  description: String
+  id: String!
+  name: String!
+  order: Float!
+  projectId: String!
+  updatedAt: DateTime!
 }
 
 enum TaskPriority {
@@ -252,6 +275,7 @@ type TaskType {
   dueDate: DateTime
   estimatedTime: Float
   id: String!
+  listId: String
   parentTask: ParentTaskInfoType
   parentTaskId: String
   priority: TaskPriority!
@@ -328,6 +352,12 @@ input UpdateTaskInput {
   status: TaskStatus
   timeSpent: Float
   title: String
+}
+
+input UpdateTaskListInput {
+  description: String
+  name: String
+  order: Float
 }
 
 input UpdateUserInput {

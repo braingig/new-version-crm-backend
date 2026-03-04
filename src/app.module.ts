@@ -16,6 +16,7 @@ import { SalesModule } from './sales/sales.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ActivityLogsModule } from './activity-logs/activity-logs.module';
 import { ActivityModule } from './activity/activity.module';
+import { TaskListsModule } from './task-lists/task-lists.module';
 
 @Module({
     imports: [
@@ -42,6 +43,7 @@ import { ActivityModule } from './activity/activity.module';
         UsersModule,
         ProjectsModule,
         TasksModule,
+        TaskListsModule,
         TimesheetsModule,
         PayrollModule,
         SalesModule,
