@@ -1,0 +1,389 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type AuthResponse {
+  accessToken: String!
+  refreshToken: String!
+  user: UserType!
+}
+
+type CommentType {
+  content: String!
+  createdAt: DateTime!
+  id: String!
+  taskId: String!
+  user: UserBasicType
+}
+
+input CreateProjectInput {
+  budget: Float!
+  clientName: String
+  description: String
+  endDate: DateTime
+  hourlyRate: Float
+  name: String!
+  startDate: DateTime!
+  status: ProjectStatus
+}
+
+input CreateSaleInput {
+  assignedToId: String!
+  companyName: String
+  email: String
+  estimatedValue: Float!
+  expectedCloseDate: DateTime
+  leadName: String!
+  notes: String
+  phone: String
+  source: String
+}
+
+input CreateTaskInput {
+  assignedToId: String
+  description: String
+  dueDate: DateTime
+  estimatedTime: Float
+  parentTaskId: String
+  priority: TaskPriority!
+  projectId: String!
+  startDate: DateTime
+  title: String!
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+type Employee {
+  department: String
+  email: String!
+  id: String!
+  name: String!
+  salaryType: String
+}
+
+type EmployeeType {
+  email: String!
+  id: String!
+  name: String!
+  workType: WorkType
+}
+
+"""JSON scalar type"""
+scalar JSON
+
+input LoginInput {
+  email: String!
+  password: String!
+}
+
+type Mutation {
+  addComment(content: String!, taskId: String!): CommentType!
+  checkIn: TimesheetType!
+  checkOut: TimesheetType!
+  createProject(input: CreateProjectInput!): ProjectType!
+  createSale(input: CreateSaleInput!): Sale!
+  createTask(input: CreateTaskInput!): TaskType!
+  deleteProject(id: String!): Boolean!
+  deleteTask(id: String!): Boolean!
+  deleteUser(id: String!): Boolean!
+  generatePayroll(employeeId: String!, month: DateTime!): Boolean!
+  login(input: LoginInput!): AuthResponse!
+  logout: Boolean!
+  refreshToken(input: RefreshTokenInput!): RefreshTokenResponse!
+  register(input: RegisterInput!): AuthResponse!
+  reportActivity(metadata: JSON, type: String!): Boolean!
+  startTimeEntry(input: StartTimeEntryInput!): TimeEntryType!
+  stopTimeEntry(effectiveDurationSeconds: Int): TimeEntryType!
+  updateEmployeeWorkType(workType: String!): EmployeeType!
+  updateProject(id: String!, input: UpdateProjectInput!): ProjectType!
+  updateTask(id: String!, input: UpdateTaskInput!): TaskType!
+  updateUser(id: String!, input: UpdateUserInput!): UserType!
+}
+
+type ParentTaskInfoType {
+  id: String!
+  title: String!
+}
+
+type Payroll {
+  baseSalary: Float!
+  bonus: Float
+  createdAt: DateTime!
+  deductions: Float
+  employee: Employee
+  employeeId: String!
+  hoursWorked: Float
+  id: String!
+  month: DateTime!
+  paidAt: DateTime
+  status: String!
+  totalPaid: Float!
+  updatedAt: DateTime!
+}
+
+type ProjectBasicType {
+  id: String!
+  name: String!
+}
+
+input ProjectFiltersInput {
+  status: ProjectStatus
+}
+
+enum ProjectStatus {
+  ACTIVE
+  CANCELLED
+  COMPLETED
+  ON_HOLD
+  PLANNING
+}
+
+type ProjectType {
+  budget: Float!
+  clientName: String
+  createdAt: DateTime!
+  createdBy: UserBasicType!
+  description: String
+  endDate: DateTime
+  hourlyRate: Float
+  id: String!
+  name: String!
+  startDate: DateTime!
+  status: ProjectStatus!
+  updatedAt: DateTime!
+}
+
+type Query {
+  activeTimeEntry: TimeEntryType
+  employeeWorkType: WorkType
+  me: UserType!
+  payrolls(employeeId: String): [Payroll!]!
+  project(id: String!): ProjectType!
+  projects(filters: ProjectFiltersInput): [ProjectType!]!
+  sales(assignedToId: String): [Sale!]!
+  task(id: String!): TaskType!
+  tasks(filters: TaskFiltersInput): [TaskType!]!
+  tasksForSelection(filters: TaskFiltersInput): [TaskType!]!
+  timeEntries(employeeId: String, taskId: String, taskIds: [String!]): [TimeEntryType!]!
+  timesheets(employeeId: String, endDate: DateTime, startDate: DateTime): [TimesheetType!]!
+  todaySessions: [TimesheetType!]!
+  todayTimesheet: TimesheetType
+  user(id: String!): UserType!
+  users(filters: UserFiltersInput): [UserType!]!
+}
+
+input RefreshTokenInput {
+  refreshToken: String!
+}
+
+type RefreshTokenResponse {
+  accessToken: String!
+  refreshToken: String!
+}
+
+input RegisterInput {
+  department: String
+  email: String!
+  joiningDate: DateTime!
+  name: String!
+  password: String!
+  phone: String
+  role: UserRole!
+  salaryAmount: Float!
+  salaryType: SalaryType!
+  skills: [String!]
+}
+
+enum SalaryType {
+  FIXED
+  HOURLY
+}
+
+type Sale {
+  assignedToId: String!
+  companyName: String
+  createdAt: DateTime!
+  email: String
+  estimatedValue: Float!
+  expectedCloseDate: DateTime
+  id: String!
+  leadName: String!
+  notes: String
+  phone: String
+  source: String
+  updatedAt: DateTime!
+}
+
+input StartTimeEntryInput {
+  description: String
+  taskId: String
+}
+
+input TaskFiltersInput {
+  assignedToId: String
+  priority: TaskPriority
+  projectId: String
+  status: TaskStatus
+}
+
+enum TaskPriority {
+  HIGH
+  LOW
+  MEDIUM
+  URGENT
+}
+
+enum TaskStatus {
+  COMPLETED
+  IN_PROGRESS
+  REVIEW
+  TODO
+}
+
+type TaskType {
+  assignedTo: UserBasicType
+  assignedToId: String
+  comments: [CommentType!]
+  createdAt: DateTime!
+  description: String
+  dueDate: DateTime
+  estimatedTime: Float
+  id: String!
+  parentTask: ParentTaskInfoType
+  parentTaskId: String
+  priority: TaskPriority!
+  project: ProjectBasicType
+  projectId: String!
+  startDate: DateTime
+  status: TaskStatus!
+  subTasks: [TaskType!]
+  timeSpent: Float!
+  title: String!
+  updatedAt: DateTime!
+}
+
+"""Time entry status classification"""
+enum TimeEntryStatus {
+  PAUSED
+  RESUMED
+  STARTED
+  STOPPED
+}
+
+type TimeEntryType {
+  createdAt: DateTime!
+  description: String
+  duration: Float!
+  employeeId: String!
+  endTime: DateTime
+  id: String!
+  isManual: Boolean!
+  startTime: DateTime!
+  status: TimeEntryStatus!
+  taskId: String
+}
+
+enum TimesheetStatus {
+  APPROVED
+  PENDING
+  REJECTED
+}
+
+type TimesheetType {
+  checkIn: DateTime
+  checkOut: DateTime
+  createdAt: DateTime!
+  date: DateTime!
+  employee: EmployeeType
+  employeeId: String!
+  id: String!
+  notes: String
+  sessionNumber: Float!
+  status: TimesheetStatus!
+  totalHours: Float!
+  updatedAt: DateTime!
+}
+
+input UpdateProjectInput {
+  budget: Float
+  clientName: String
+  description: String
+  endDate: DateTime
+  hourlyRate: Float
+  name: String
+  startDate: DateTime
+  status: ProjectStatus
+}
+
+input UpdateTaskInput {
+  assignedToId: String
+  description: String
+  dueDate: DateTime
+  estimatedTime: Float
+  priority: TaskPriority
+  startDate: DateTime
+  status: TaskStatus
+  timeSpent: Float
+  title: String
+}
+
+input UpdateUserInput {
+  department: String
+  email: String
+  name: String
+  phone: String
+  salaryAmount: Float
+  salaryType: SalaryType
+  skills: [String!]
+  status: String
+}
+
+type UserBasicType {
+  email: String!
+  id: String!
+  name: String!
+}
+
+input UserFiltersInput {
+  department: String
+  role: UserRole
+  status: String
+}
+
+enum UserRole {
+  ADMIN
+  DEVELOPER
+  FINANCE
+  HR
+  SALES
+  TEAM_LEAD
+}
+
+type UserType {
+  createdAt: DateTime!
+  department: String
+  email: String!
+  id: String!
+  joiningDate: DateTime!
+  lastActive: DateTime
+  name: String!
+  phone: String
+  role: UserRole!
+  salaryAmount: Float!
+  salaryType: SalaryType!
+  skills: [String!]!
+  status: String!
+  updatedAt: DateTime!
+}
+
+"""Employee work type classification"""
+enum WorkType {
+  """Onsite employee with fixed work hours"""
+  ONSITE
+
+  """Remote employee with flexible work hours"""
+  REMOTE
+}

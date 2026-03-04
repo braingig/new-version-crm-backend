@@ -1,0 +1,330 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  HR
+  TEAM_LEAD
+  DEVELOPER
+  SALES
+  FINANCE
+}
+
+enum SalaryType {
+  FIXED
+  HOURLY
+}
+
+enum WorkType {
+  REMOTE
+  ONSITE
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  COMPLETED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum SalesStatus {
+  NEW
+  QUALIFIED
+  PROPOSAL
+  NEGOTIATION
+  CLOSED_WON
+  CLOSED_LOST
+}
+
+enum PayrollStatus {
+  PENDING
+  PROCESSED
+  PAID
+}
+
+enum TimesheetStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum TimeEntryStatus {
+  STARTED
+  PAUSED
+  RESUMED
+  STOPPED
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+}
+
+model User {
+  id            String      @id @default(uuid())
+  email         String      @unique
+  password      String
+  name          String
+  role          UserRole    @default(DEVELOPER)
+  phone         String?
+  department    String?
+  skills        String[]
+  salaryType    SalaryType  @default(FIXED)
+  salaryAmount  Float
+  workType      WorkType    @default(REMOTE)
+  joiningDate   DateTime    @default(now())
+  status        String      @default("ACTIVE")
+  lastActive    DateTime?
+  refreshToken  String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  // Relations
+  createdProjects Project[]   @relation("ProjectCreator")
+  assignedTasks   Task[]      @relation("TaskAssignee")
+  createdTasks    Task[]      @relation("TaskCreator")
+  timesheets      Timesheet[]
+  timeEntries     TimeEntry[]
+  payrolls        Payroll[]
+  assignedSales   Sale[]
+  activityLogs    ActivityLog[]
+  notifications   Notification[]
+  comments        Comment[]
+
+activityEvents  ActivityEvent[]
+
+  @@index([email])
+  @@index([role])
+  @@index([status])
+}
+
+model Project {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  budget      Float
+  hourlyRate  Float?
+  status      ProjectStatus @default(PLANNING)
+  startDate   DateTime
+  endDate     DateTime?
+  clientName  String?
+  createdById String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  createdBy User   @relation("ProjectCreator", fields: [createdById], references: [id])
+  tasks     Task[]
+
+  @@index([status])
+  @@index([createdById])
+}
+
+model Task {
+  id            String       @id @default(uuid())
+  projectId     String
+  title         String
+  description   String?
+  status        TaskStatus   @default(TODO)
+  priority      TaskPriority @default(MEDIUM)
+  assignedToId  String?
+  startDate     DateTime?
+  dueDate       DateTime?
+  timeSpent     Int          @default(0) // in minutes
+  estimatedTime Int? // in minutes
+  createdById   String
+  parentTaskId  String?      // For sub-tasks
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  // Relations
+  project      Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignedTo   User?       @relation("TaskAssignee", fields: [assignedToId], references: [id])
+  createdBy    User        @relation("TaskCreator", fields: [createdById], references: [id])
+  parentTask   Task?       @relation("SubTasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  subTasks     Task[]      @relation("SubTasks")
+  timeEntries  TimeEntry[]
+  comments     Comment[]
+
+  @@index([projectId])
+  @@index([assignedToId])
+  @@index([status])
+  @@index([priority])
+  @@index([parentTaskId])
+}
+
+model Timesheet {
+  id         String          @id @default(uuid())
+  employeeId String
+  date       DateTime        @db.Date
+  checkIn    DateTime?
+  checkOut   DateTime?
+  totalHours Float           @default(0)
+  status     TimesheetStatus @default(PENDING)
+  notes      String?
+  sessionNumber Int          @default(1) // For remote employees to track multiple sessions
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  // Relations
+  employee User @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date, sessionNumber])
+  @@index([employeeId])
+  @@index([date])
+}
+
+model TimeEntry {
+  id          String          @id @default(uuid())
+  employeeId  String
+  taskId      String?
+  startTime   DateTime
+  endTime     DateTime?
+  duration    Int             @default(0) // in minutes
+  description String?
+  isManual    Boolean         @default(false)
+  status      TimeEntryStatus @default(STARTED)
+  createdAt   DateTime        @default(now())
+
+  // Relations
+  employee User  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  task     Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([employeeId])
+  @@index([taskId])
+  @@index([startTime])
+  @@index([status])
+}
+
+model Payroll {
+  id          String        @id @default(uuid())
+  employeeId  String
+  month       DateTime      @db.Date
+  baseSalary  Float
+  bonus       Float         @default(0)
+  deductions  Float         @default(0)
+  totalPaid   Float
+  hoursWorked Float?
+  status      PayrollStatus @default(PENDING)
+  paidAt      DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  employee User @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, month])
+  @@index([employeeId])
+  @@index([month])
+  @@index([status])
+}
+
+model Sale {
+  id                String      @id @default(uuid())
+  leadName          String
+  companyName       String?
+  email             String?
+  phone             String?
+  source            String?
+  status            SalesStatus @default(NEW)
+  estimatedValue    Float
+  actualValue       Float?
+  assignedToId      String
+  notes             String?
+  expectedCloseDate DateTime?
+  closedAt          DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  // Relations
+  assignedTo User @relation(fields: [assignedToId], references: [id])
+
+  @@index([assignedToId])
+  @@index([status])
+}
+
+model ActivityLog {
+  id         String   @id @default(uuid())
+  userId     String
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  type      NotificationType @default(INFO)
+  isRead    Boolean          @default(false)
+  link      String?
+  createdAt DateTime         @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  taskId    String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([userId])
+}
+
+model ActivityEvent {
+  id         String   @id @default(uuid())
+  employeeId String
+  type       String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  employee User @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, createdAt])
+}
