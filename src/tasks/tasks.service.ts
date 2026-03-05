@@ -242,9 +242,39 @@ export class TasksService {
     }
 
     async delete(id: string) {
-        await this.prisma.task.delete({
-            where: { id },
+        // Delete task plus any related records that can block deletion
+        await this.prisma.$transaction(async (tx) => {
+            // Collect this task and its direct subtasks
+            const tasks = await tx.task.findMany({
+                where: {
+                    OR: [{ id }, { parentTaskId: id }],
+                },
+                select: { id: true },
+            });
+
+            if (tasks.length === 0) {
+                // Nothing to delete – behave as success
+                return;
+            }
+
+            const taskIds = tasks.map((t) => t.id);
+
+            // Remove time entries referencing these tasks
+            await tx.timeEntry.deleteMany({
+                where: { taskId: { in: taskIds } },
+            });
+
+            // Remove comments referencing these tasks
+            await tx.comment.deleteMany({
+                where: { taskId: { in: taskIds } },
+            });
+
+            // Finally delete the tasks (parent + subtasks)
+            await tx.task.deleteMany({
+                where: { id: { in: taskIds } },
+            });
         });
+
         return true;
     }
 
