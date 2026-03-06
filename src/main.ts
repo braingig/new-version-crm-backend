@@ -9,16 +9,10 @@ async function bootstrap() {
     const configService = app.get(ConfigService);
 
     // Enable CORS: set CORS_ORIGIN in .env or in your platform's env (e.g. Easypanel)
-    const corsOrigin =
-        configService.get<string>('CORS_ORIGIN') ||
-        process.env.CORS_ORIGIN ||
-        'http://localhost:3000';
-    console.log('CORS origin:', corsOrigin);
     app.enableCors({
-        origin: corsOrigin,
+        origin: 'https://test-braingig-crm-frontend.vvowhz.easypanel.host/',
+        // origin: 'http://localhost:3000',
         credentials: true,
-        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
     });
 
     // Global validation pipe
