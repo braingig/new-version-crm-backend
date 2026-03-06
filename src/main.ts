@@ -9,9 +9,9 @@ async function bootstrap() {
     const configService = app.get(ConfigService);
 
     // Enable CORS
+    const corsOrigin = configService.get<string>('CORS_ORIGIN') || 'http://localhost:3000';
     app.enableCors({
-        // origin: 'https://test-frontend.vvowhz.easypanel.host',
-        origin: 'http://localhost:3000',
+        origin: corsOrigin,
         credentials: true,
     });
 
