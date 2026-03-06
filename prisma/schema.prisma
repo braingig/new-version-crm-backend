@@ -103,9 +103,10 @@ model User {
   updatedAt     DateTime    @updatedAt
 
   // Relations
-  createdProjects Project[]   @relation("ProjectCreator")
-  assignedTasks   Task[]      @relation("TaskAssignee")
-  createdTasks    Task[]      @relation("TaskCreator")
+  createdProjects   Project[]       @relation("ProjectCreator")
+  assignedTasks     Task[]          @relation("TaskAssignee")
+  taskAssigneeLinks TaskAssignee[]  @relation("TaskAssigneeLink")
+  createdTasks      Task[]          @relation("TaskCreator")
   timesheets      Timesheet[]
   timeEntries     TimeEntry[]
   payrolls        Payroll[]
@@ -179,14 +180,15 @@ model Task {
   updatedAt     DateTime     @updatedAt
 
   // Relations
-  project      Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  list         TaskList?   @relation(fields: [listId], references: [id], onDelete: SetNull)
-  assignedTo   User?       @relation("TaskAssignee", fields: [assignedToId], references: [id])
-  createdBy    User        @relation("TaskCreator", fields: [createdById], references: [id])
-  parentTask   Task?       @relation("SubTasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
-  subTasks     Task[]      @relation("SubTasks")
-  timeEntries  TimeEntry[]
-  comments     Comment[]
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  list            TaskList?       @relation(fields: [listId], references: [id], onDelete: SetNull)
+  assignedTo      User?           @relation("TaskAssignee", fields: [assignedToId], references: [id])
+  taskAssignees   TaskAssignee[]
+  createdBy       User            @relation("TaskCreator", fields: [createdById], references: [id])
+  parentTask      Task?           @relation("SubTasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  subTasks        Task[]          @relation("SubTasks")
+  timeEntries     TimeEntry[]
+  comments        Comment[]
 
   @@index([projectId])
   @@index([assignedToId])
@@ -194,6 +196,18 @@ model Task {
   @@index([priority])
   @@index([parentTaskId])
   @@index([listId])
+}
+
+model TaskAssignee {
+  id       String @id @default(uuid())
+  taskId   String
+  userId   String
+  task     Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user     User   @relation("TaskAssigneeLink", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, userId])
+  @@index([taskId])
+  @@index([userId])
 }
 
 model Timesheet {

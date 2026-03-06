@@ -138,4 +138,7 @@ export class TimeEntryType {
 
     @Field()
     createdAt: Date;
+
+    @Field(() => EmployeeType, { nullable: true })
+    employee?: EmployeeType;
 }

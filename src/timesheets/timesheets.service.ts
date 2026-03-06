@@ -269,6 +269,7 @@ export class TimesheetsService {
                     select: {
                         id: true,
                         name: true,
+                        email: true,
                     },
                 },
                 task: {

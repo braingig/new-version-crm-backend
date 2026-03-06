@@ -41,6 +41,7 @@ input CreateSaleInput {
 
 input CreateTaskInput {
   assignedToId: String
+  assigneeIds: [String!]
   description: String
   dueDate: DateTime
   estimatedTime: Float
@@ -269,8 +270,10 @@ enum TaskStatus {
 type TaskType {
   assignedTo: UserBasicType
   assignedToId: String
+  assignees: [UserBasicType!]
   comments: [CommentType!]
   createdAt: DateTime!
+  createdBy: UserBasicType
   description: String
   dueDate: DateTime
   estimatedTime: Float
@@ -301,6 +304,7 @@ type TimeEntryType {
   createdAt: DateTime!
   description: String
   duration: Float!
+  employee: EmployeeType
   employeeId: String!
   endTime: DateTime
   id: String!
@@ -344,6 +348,7 @@ input UpdateProjectInput {
 
 input UpdateTaskInput {
   assignedToId: String
+  assigneeIds: [String!]
   description: String
   dueDate: DateTime
   estimatedTime: Float

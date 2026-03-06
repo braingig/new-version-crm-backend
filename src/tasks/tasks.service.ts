@@ -19,11 +19,15 @@ export class TasksService {
             dueDate?: Date;
             estimatedTime?: number;
             parentTaskId?: string;
+            assigneeIds?: string[];
         },
     ) {
-        return this.prisma.task.create({
+        const { assigneeIds, ...rest } = data;
+        const assignedToId = rest.assignedToId ?? assigneeIds?.[0];
+        const task = await this.prisma.task.create({
             data: {
-                ...data,
+                ...rest,
+                assignedToId,
                 createdById: userId,
             },
             include: {
@@ -53,8 +57,38 @@ export class TasksService {
                         },
                     },
                 },
+                taskAssignees: {
+                    include: {
+                        user: { select: { id: true, name: true, email: true } },
+                    },
+                },
             },
         });
+        if (assigneeIds?.length) {
+            await this.prisma.taskAssignee.createMany({
+                data: assigneeIds.map((uid) => ({ taskId: task.id, userId: uid })),
+                skipDuplicates: true,
+            });
+            return this.prisma.task.findUnique({
+                where: { id: task.id },
+                include: {
+                    project: true,
+                    assignedTo: { select: { id: true, name: true, email: true } },
+                    createdBy: { select: { id: true, name: true, email: true } },
+                    subTasks: {
+                        include: {
+                            assignedTo: { select: { id: true, name: true, email: true } },
+                        },
+                    },
+                    taskAssignees: {
+                        include: {
+                            user: { select: { id: true, name: true, email: true } },
+                        },
+                    },
+                },
+            });
+        }
+        return task;
     }
 
     async findAll(filters?: {
@@ -85,6 +119,11 @@ export class TasksService {
                         id: true,
                         name: true,
                         email: true,
+                    },
+                },
+                taskAssignees: {
+                    include: {
+                        user: { select: { id: true, name: true, email: true } },
                     },
                 },
                 createdBy: {
@@ -140,6 +179,11 @@ export class TasksService {
                         id: true,
                         name: true,
                         email: true,
+                    },
+                },
+                taskAssignees: {
+                    include: {
+                        user: { select: { id: true, name: true, email: true } },
                     },
                 },
                 createdBy: {
@@ -201,11 +245,23 @@ export class TasksService {
             dueDate: Date;
             timeSpent: number;
             estimatedTime: number;
+            assigneeIds: string[];
         }>,
     ) {
+        const { assigneeIds, ...rest } = data;
+        if (assigneeIds !== undefined) {
+            await this.prisma.taskAssignee.deleteMany({ where: { taskId: id } });
+            if (assigneeIds.length > 0) {
+                await this.prisma.taskAssignee.createMany({
+                    data: assigneeIds.map((userId) => ({ taskId: id, userId })),
+                    skipDuplicates: true,
+                });
+            }
+            rest.assignedToId = assigneeIds.length > 0 ? assigneeIds[0] : null;
+        }
         return this.prisma.task.update({
             where: { id },
-            data,
+            data: rest,
             include: {
                 project: true,
                 assignedTo: {
@@ -213,6 +269,11 @@ export class TasksService {
                         id: true,
                         name: true,
                         email: true,
+                    },
+                },
+                taskAssignees: {
+                    include: {
+                        user: { select: { id: true, name: true, email: true } },
                     },
                 },
                 subTasks: {

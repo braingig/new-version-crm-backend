@@ -1,5 +1,5 @@
 import { InputType, Field, ObjectType, registerEnumType } from '@nestjs/graphql';
-import { IsString, IsNotEmpty, IsOptional, IsEnum, IsDate, IsNumber } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsEnum, IsDate, IsNumber, IsArray } from 'class-validator';
 import { TaskStatus, TaskPriority } from '@prisma/client';
 import { UserBasicType } from '../../projects/dto/project.dto';
 
@@ -56,6 +56,12 @@ export class CreateTaskInput {
     @IsOptional()
     @IsString()
     parentTaskId?: string;
+
+    @Field(() => [String], { nullable: true })
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
+    assigneeIds?: string[];
 }
 
 @InputType()
@@ -104,6 +110,12 @@ export class UpdateTaskInput {
     @IsOptional()
     @IsNumber()
     estimatedTime?: number;
+
+    @Field(() => [String], { nullable: true })
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
+    assigneeIds?: string[];
 }
 
 @InputType()
@@ -204,6 +216,12 @@ export class TaskType {
 
     @Field(() => UserBasicType, { nullable: true })
     assignedTo?: UserBasicType;
+
+    @Field(() => UserBasicType, { nullable: true })
+    createdBy?: UserBasicType;
+
+    @Field(() => [UserBasicType], { nullable: true })
+    assignees?: UserBasicType[];
 
     @Field(() => [CommentType], { nullable: true })
     comments?: CommentType[];

@@ -1,13 +1,19 @@
-import { Resolver, Query, Mutation, Args } from '@nestjs/graphql';
+import { Resolver, Query, Mutation, Args, ResolveField, Parent } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { TaskType, CreateTaskInput, UpdateTaskInput, TaskFiltersInput, CommentType } from './dto/task.dto';
+import { UserBasicType } from '../projects/dto/project.dto';
 
 @Resolver(() => TaskType)
 export class TasksResolver {
     constructor(private tasksService: TasksService) { }
+
+    @ResolveField('assignees', () => [UserBasicType])
+    assignees(@Parent() task: any) {
+        return task.taskAssignees?.map((ta: any) => ta.user) ?? [];
+    }
 
     @Query(() => [TaskType])
     @UseGuards(GqlAuthGuard)
