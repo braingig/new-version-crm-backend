@@ -73,6 +73,15 @@ type Employee {
   salaryType: String
 }
 
+type EmployeeDailyActivityType {
+  date: DateTime!
+  email: String
+  employeeId: String!
+  employeeName: String!
+  projects: [ProjectTimeSummaryType!]!
+  totalSeconds: Float!
+}
+
 type EmployeeType {
   email: String!
   id: String!
@@ -153,6 +162,12 @@ enum ProjectStatus {
   PLANNING
 }
 
+type ProjectTimeSummaryType {
+  projectId: String!
+  projectName: String!
+  seconds: Float!
+}
+
 type ProjectType {
   budget: Float!
   clientName: String
@@ -170,6 +185,7 @@ type ProjectType {
 
 type Query {
   activeTimeEntry: TimeEntryType
+  employeeDailyActivity(employeeId: String, endDate: DateTime!, startDate: DateTime!): [EmployeeDailyActivityType!]!
   employeeWorkType: WorkType
   me: UserType!
   payrolls(employeeId: String): [Payroll!]!

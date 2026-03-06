@@ -367,6 +367,98 @@ export class TimesheetsService {
         });
     }
 
+    /**
+     * Report: total time per employee per day, with projects worked on.
+     * Uses existing TimeEntry + Task + User — no new table. For admin view and export.
+     */
+    async getEmployeeDailyActivity(
+        startDate: Date,
+        endDate: Date,
+        employeeId?: string,
+    ): Promise<
+        Array<{
+            employeeId: string;
+            employeeName: string;
+            email: string | null;
+            date: Date;
+            totalSeconds: number;
+            projects: Array<{ projectId: string; projectName: string; seconds: number }>;
+        }>
+    > {
+        const startOfStart = new Date(startDate);
+        startOfStart.setHours(0, 0, 0, 0);
+        const endOfEnd = new Date(endDate);
+        endOfEnd.setHours(23, 59, 59, 999);
+
+        const entries = await (this.prisma as any).timeEntry.findMany({
+            where: {
+                ...(employeeId && { employeeId }),
+                startTime: { gte: startOfStart, lte: endOfEnd },
+            },
+            include: {
+                employee: {
+                    select: { id: true, name: true, email: true },
+                },
+                task: {
+                    select: {
+                        projectId: true,
+                        project: { select: { id: true, name: true } },
+                    },
+                },
+            },
+        });
+
+        const byEmployeeDay = new Map<
+            string,
+            {
+                employeeId: string;
+                employeeName: string;
+                email: string | null;
+                date: Date;
+                totalSeconds: number;
+                byProject: Map<string, { projectName: string; seconds: number }>;
+            }
+        >();
+
+        for (const e of entries) {
+            const day = new Date(e.startTime);
+            day.setHours(0, 0, 0, 0);
+            const key = `${e.employeeId}|${day.getTime()}`;
+            const durationSeconds = typeof e.duration === 'number' ? e.duration : 0;
+            const projectId = e.task?.projectId ?? 'no-project';
+            const projectName = e.task?.project?.name ?? 'No project';
+
+            if (!byEmployeeDay.has(key)) {
+                byEmployeeDay.set(key, {
+                    employeeId: e.employeeId,
+                    employeeName: e.employee?.name ?? 'Unknown',
+                    email: e.employee?.email ?? null,
+                    date: day,
+                    totalSeconds: 0,
+                    byProject: new Map(),
+                });
+            }
+            const row = byEmployeeDay.get(key)!;
+            row.totalSeconds += durationSeconds;
+            const proj = row.byProject.get(projectId);
+            if (proj) proj.seconds += durationSeconds;
+            else row.byProject.set(projectId, { projectName, seconds: durationSeconds });
+        }
+
+        return Array.from(byEmployeeDay.values()).map((row) => ({
+            employeeId: row.employeeId,
+            employeeName: row.employeeName,
+            email: row.email,
+            date: row.date,
+            totalSeconds: row.totalSeconds,
+            projects: Array.from(row.byProject.entries()).map(([projectId, p]) => ({
+                projectId,
+                projectName: p.projectName,
+                seconds: p.seconds,
+            })),
+        }));
+    }
+
     async getEmployeeWorkType(employeeId: string) {
         const employee = await (this.prisma as any).user.findUnique({
             where: { id: employeeId },

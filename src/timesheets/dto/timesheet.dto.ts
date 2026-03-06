@@ -142,3 +142,36 @@ export class TimeEntryType {
     @Field(() => EmployeeType, { nullable: true })
     employee?: EmployeeType;
 }
+
+@ObjectType()
+export class ProjectTimeSummaryType {
+    @Field()
+    projectId: string;
+
+    @Field()
+    projectName: string;
+
+    @Field()
+    seconds: number;
+}
+
+@ObjectType()
+export class EmployeeDailyActivityType {
+    @Field()
+    employeeId: string;
+
+    @Field()
+    employeeName: string;
+
+    @Field({ nullable: true })
+    email?: string;
+
+    @Field()
+    date: Date;
+
+    @Field()
+    totalSeconds: number;
+
+    @Field(() => [ProjectTimeSummaryType])
+    projects: ProjectTimeSummaryType[];
+}

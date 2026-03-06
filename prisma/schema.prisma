@@ -237,7 +237,7 @@ model TimeEntry {
   taskId      String?
   startTime   DateTime
   endTime     DateTime?
-  duration    Int             @default(0) // in minutes
+  duration    Int             @default(0) // in seconds (stopTimeEntry writes seconds for accurate display)
   description String?
   isManual    Boolean         @default(false)
   status      TimeEntryStatus @default(STARTED)

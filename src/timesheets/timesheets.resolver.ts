@@ -4,7 +4,7 @@ import { UseGuards, BadRequestException } from '@nestjs/common';
 import { TimesheetsService } from './timesheets.service';
 import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { TimesheetType, TimeEntryType, StartTimeEntryInput, WorkType, EmployeeType } from './dto/timesheet.dto';
+import { TimesheetType, TimeEntryType, StartTimeEntryInput, WorkType, EmployeeType, EmployeeDailyActivityType } from './dto/timesheet.dto';
 
 @Resolver()
 export class TimesheetsResolver {
@@ -67,6 +67,17 @@ export class TimesheetsResolver {
         @Args('taskIds', { type: () => [String], nullable: true }) taskIds?: string[],
     ) {
         return this.timesheetsService.getTimeEntries(employeeId, taskId, taskIds);
+    }
+
+    /** Employee daily activity report: total time per day, per employee, with projects. For admin view and export. No new table — from TimeEntry + Task + User. */
+    @Query(() => [EmployeeDailyActivityType])
+    @UseGuards(GqlAuthGuard)
+    async employeeDailyActivity(
+        @Args('startDate', { type: () => Date }) startDate: Date,
+        @Args('endDate', { type: () => Date }) endDate: Date,
+        @Args('employeeId', { nullable: true }) employeeId?: string,
+    ) {
+        return this.timesheetsService.getEmployeeDailyActivity(startDate, endDate, employeeId);
     }
 
     @Query(() => TimeEntryType, { nullable: true })
