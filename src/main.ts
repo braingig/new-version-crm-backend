@@ -8,11 +8,17 @@ async function bootstrap() {
     const app = await NestFactory.create(AppModule);
     const configService = app.get(ConfigService);
 
-    // Enable CORS
-    const corsOrigin = configService.get<string>('CORS_ORIGIN') || 'http://localhost:3000';
+    // Enable CORS: set CORS_ORIGIN in .env or in your platform's env (e.g. Easypanel)
+    const corsOrigin =
+        configService.get<string>('CORS_ORIGIN') ||
+        process.env.CORS_ORIGIN ||
+        'http://localhost:3000';
+    console.log('CORS origin:', corsOrigin);
     app.enableCors({
         origin: corsOrigin,
         credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
     });
 
     // Global validation pipe
