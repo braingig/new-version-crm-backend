@@ -16,18 +16,20 @@ export class CreateProjectInput {
     @IsString()
     description?: string;
 
-    @Field()
+    @Field({ nullable: true })
+    @IsOptional()
     @IsNumber()
-    budget: number;
+    budget?: number;
 
     @Field({ nullable: true })
     @IsOptional()
     @IsNumber()
     hourlyRate?: number;
 
-    @Field()
+    @Field({ nullable: true })
+    @IsOptional()
     @IsDate()
-    startDate: Date;
+    startDate?: Date;
 
     @Field({ nullable: true })
     @IsOptional()

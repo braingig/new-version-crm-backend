@@ -11,9 +11,9 @@ export class ProjectsService {
         data: {
             name: string;
             description?: string;
-            budget: number;
+            budget?: number;
             hourlyRate?: number;
-            startDate: Date;
+            startDate?: Date;
             endDate?: Date;
             clientName?: string;
         },
@@ -21,6 +21,8 @@ export class ProjectsService {
         return this.prisma.project.create({
             data: {
                 ...data,
+                budget: data.budget ?? 0,
+                startDate: data.startDate ?? new Date(),
                 createdById: userId,
             },
             include: {

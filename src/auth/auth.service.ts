@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
-import { User } from '@prisma/client';
+import { User, SalaryType } from '@prisma/client';
 import { TimesheetsService } from '../timesheets/timesheets.service';
 
 @Injectable()
@@ -72,8 +72,8 @@ export class AuthService {
         phone?: string;
         department?: string;
         skills?: string[];
-        salaryType: any;
-        salaryAmount: number;
+        salaryType?: any;
+        salaryAmount?: number;
         joiningDate: Date;
     }) {
         // Check if user exists
@@ -88,11 +88,13 @@ export class AuthService {
         // Hash password
         const hashedPassword = await bcrypt.hash(data.password, 10);
 
-        // Create user
+        // Create user (salary optional: use defaults when not provided)
         const user = await this.prisma.user.create({
             data: {
                 ...data,
                 password: hashedPassword,
+                salaryType: data.salaryType ?? SalaryType.FIXED,
+                salaryAmount: data.salaryAmount ?? 0,
             },
         });
 

@@ -17,13 +17,13 @@ type CommentType {
 }
 
 input CreateProjectInput {
-  budget: Float!
+  budget: Float
   clientName: String
   description: String
   endDate: DateTime
   hourlyRate: Float
   name: String!
-  startDate: DateTime!
+  startDate: DateTime
   status: ProjectStatus
 }
 
@@ -221,8 +221,8 @@ input RegisterInput {
   password: String!
   phone: String
   role: UserRole!
-  salaryAmount: Float!
-  salaryType: SalaryType!
+  salaryAmount: Float
+  salaryType: SalaryType
   skills: [String!]
 }
 

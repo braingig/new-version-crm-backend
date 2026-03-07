@@ -53,13 +53,15 @@ export class RegisterInput {
     @IsArray()
     skills?: string[];
 
-    @Field(() => SalaryType)
+    @Field(() => SalaryType, { nullable: true })
+    @IsOptional()
     @IsEnum(SalaryType)
-    salaryType: SalaryType;
+    salaryType?: SalaryType;
 
-    @Field()
+    @Field({ nullable: true })
+    @IsOptional()
     @IsNumber()
-    salaryAmount: number;
+    salaryAmount?: number;
 
     @Field()
     @IsDate()
