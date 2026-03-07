@@ -13,7 +13,7 @@ enum UserRole {
   TEAM_LEAD
   DEVELOPER
   SALES
-  FINANCE
+  SEO_EXPERT
 }
 
 enum SalaryType {

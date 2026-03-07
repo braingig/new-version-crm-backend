@@ -407,9 +407,9 @@ input UserFiltersInput {
 enum UserRole {
   ADMIN
   DEVELOPER
-  FINANCE
   HR
   SALES
+  SEO_EXPERT
   TEAM_LEAD
 }
 
