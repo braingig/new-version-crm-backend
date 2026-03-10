@@ -10,7 +10,7 @@ async function bootstrap() {
 
     // Enable CORS: set CORS_ORIGIN in .env or in your platform's env (e.g. Easypanel)
     app.enableCors({
-        origin: 'https://test-braingig-crm-frontend.vvowhz.easypanel.host',
+        origin: process.env.CORS_ORIGIN,
         // origin: 'http://localhost:3000',
         credentials: true,
     });
