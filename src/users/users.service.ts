@@ -1,6 +1,6 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import { Injectable, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { User, UserRole } from '@prisma/client';
+import { UserRole } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
@@ -98,8 +98,22 @@ export class UsersService {
     }
 
     async delete(id: string) {
-        await this.prisma.user.delete({
-            where: { id },
+        const fallbackUser = await this.prisma.user.findFirst({
+            where: { id: { not: id } },
+            select: { id: true },
+        });
+        if (!fallbackUser) {
+            throw new BadRequestException(
+                'Cannot delete the only user. At least one user must remain.',
+            );
+        }
+        const fallbackId = fallbackUser.id;
+
+        await this.prisma.$transaction(async (tx) => {
+            await tx.project.updateMany({ where: { createdById: id }, data: { createdById: fallbackId } });
+            await tx.task.updateMany({ where: { createdById: id }, data: { createdById: fallbackId } });
+            await tx.sale.updateMany({ where: { assignedToId: id }, data: { assignedToId: fallbackId } });
+            await tx.user.delete({ where: { id } });
         });
         return true;
     }
