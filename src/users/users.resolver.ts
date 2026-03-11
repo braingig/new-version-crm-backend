@@ -42,4 +42,14 @@ export class UsersResolver {
     async deleteUser(@Args('id') id: string) {
         return this.usersService.delete(id);
     }
+
+    @Mutation(() => Boolean)
+    @UseGuards(GqlAuthGuard)
+    async changeUserPassword(
+        @Args('id') id: string,
+        @Args('newPassword') newPassword: string,
+    ) {
+        await this.usersService.changePassword(id, newPassword);
+        return true;
+    }
 }

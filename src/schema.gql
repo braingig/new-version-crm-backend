@@ -99,6 +99,7 @@ input LoginInput {
 
 type Mutation {
   addComment(content: String!, taskId: String!): CommentType!
+  changeUserPassword(id: String!, newPassword: String!): Boolean!
   checkIn: TimesheetType!
   checkOut: TimesheetType!
   createProject(input: CreateProjectInput!): ProjectType!
