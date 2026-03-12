@@ -385,10 +385,23 @@ export class TimesheetsService {
             projects: Array<{ projectId: string; projectName: string; seconds: number }>;
         }>
     > {
+        /**
+         * IMPORTANT: The frontend already sends `startDate` and `endDate` as
+         * exact DateTime boundaries (startOfDay / endOfDay) in the user's
+         * local timezone and then serializes them with `toISOString()`.
+         *
+         * Re-normalising here with `setHours(0,0,0,0)` / `setHours(23,59,59,999)`
+         * causes a subtle timezone shift (because the ISO string is parsed as
+         * UTC and `setHours` operates in the server's local timezone). That
+         * can move entries across day boundaries and make the per‑day totals
+         * in this report disagree with the "Daily totals" shown in the
+         * time‑tracker UI.
+         *
+         * To keep the behaviour consistent with the frontend, we trust the
+         * incoming Date values and use them directly for the range filter.
+         */
         const startOfStart = new Date(startDate);
-        startOfStart.setHours(0, 0, 0, 0);
         const endOfEnd = new Date(endDate);
-        endOfEnd.setHours(23, 59, 59, 999);
 
         const entries = await (this.prisma as any).timeEntry.findMany({
             where: {
