@@ -1,10 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TaskStatus, TaskPriority } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '@prisma/client';
 
 @Injectable()
 export class TasksService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private notificationsService: NotificationsService,
+    ) {}
 
     async create(
         userId: string,
@@ -69,7 +74,7 @@ export class TasksService {
                 data: assigneeIds.map((uid) => ({ taskId: task.id, userId: uid })),
                 skipDuplicates: true,
             });
-            return this.prisma.task.findUnique({
+            const result = await this.prisma.task.findUnique({
                 where: { id: task.id },
                 include: {
                     project: true,
@@ -87,6 +92,11 @@ export class TasksService {
                     },
                 },
             });
+            this.notifyTaskAssigned(result!, userId);
+            return result!;
+        }
+        if (assignedToId && assignedToId !== userId) {
+            this.notifyTaskAssigned(task, userId);
         }
         return task;
     }
@@ -247,8 +257,27 @@ export class TasksService {
             estimatedTime: number;
             assigneeIds: string[];
         }>,
+        updatedByUserId?: string,
     ) {
         const { assigneeIds, ...rest } = data;
+        const existing = await this.prisma.task.findUnique({
+            where: { id },
+            select: {
+                title: true,
+                description: true,
+                status: true,
+                priority: true,
+                startDate: true,
+                dueDate: true,
+                assignedToId: true,
+                taskAssignees: { select: { userId: true } },
+            },
+        });
+        let previousAssigneeIds = new Set<string>();
+        if (existing) {
+            if (existing.assignedToId) previousAssigneeIds.add(existing.assignedToId);
+            existing.taskAssignees?.forEach((ta) => previousAssigneeIds.add(ta.userId));
+        }
         if (assigneeIds !== undefined) {
             await this.prisma.taskAssignee.deleteMany({ where: { taskId: id } });
             if (assigneeIds.length > 0) {
@@ -259,7 +288,7 @@ export class TasksService {
             }
             rest.assignedToId = assigneeIds.length > 0 ? assigneeIds[0] : null;
         }
-        return this.prisma.task.update({
+        const updated = await this.prisma.task.update({
             where: { id },
             data: rest,
             include: {
@@ -300,6 +329,46 @@ export class TasksService {
                 },
             },
         });
+        if (assigneeIds !== undefined && updatedByUserId) {
+            const newAssigneeIds = new Set(assigneeIds);
+            const newlyAssigned = [...newAssigneeIds].filter((uid) => !previousAssigneeIds.has(uid) && uid !== updatedByUserId);
+            if (newlyAssigned.length > 0) {
+                this.notifyTaskAssignedToUsers(updated, newlyAssigned);
+            }
+        }
+        if (updatedByUserId && existing) {
+            const changedFields = this.getActuallyChangedFields(existing, updated, previousAssigneeIds);
+            this.notifyTaskUpdated(updated, updatedByUserId, changedFields);
+        }
+        return updated;
+    }
+
+    /**
+     * Compare previous task state with updated state and return only fields that actually changed.
+     */
+    private getActuallyChangedFields(
+        existing: { title: string; description: string | null; status: TaskStatus; priority: TaskPriority; startDate: Date | null; dueDate: Date | null; assignedToId: string | null; taskAssignees: { userId: string }[] },
+        updated: { title: string; description: string | null; status: TaskStatus; priority: TaskPriority; startDate: Date | null; dueDate: Date | null; assignedToId: string | null; taskAssignees: { user: { id: string } }[] },
+        previousAssigneeIds: Set<string>,
+    ): string[] {
+        const labels: string[] = [];
+        if (existing.title !== updated.title) labels.push('Title');
+        if ((existing.description ?? '') !== (updated.description ?? '')) labels.push('Description');
+        if (existing.status !== updated.status) labels.push('Status');
+        if (existing.priority !== updated.priority) labels.push('Priority');
+        const existingStart = existing.startDate?.getTime();
+        const updatedStart = updated.startDate?.getTime();
+        if (existingStart !== updatedStart) labels.push('Start date');
+        const existingDue = existing.dueDate?.getTime();
+        const updatedDue = updated.dueDate?.getTime();
+        if (existingDue !== updatedDue) labels.push('Due date');
+        const newAssigneeIds = new Set<string>();
+        if (updated.assignedToId) newAssigneeIds.add(updated.assignedToId);
+        updated.taskAssignees?.forEach((ta) => newAssigneeIds.add(ta.user.id));
+        const assigneesChanged = previousAssigneeIds.size !== newAssigneeIds.size ||
+            [...previousAssigneeIds].some((id) => !newAssigneeIds.has(id));
+        if (assigneesChanged) labels.push('Assignees');
+        return labels;
     }
 
     async delete(id: string) {
@@ -381,5 +450,78 @@ export class TasksService {
                 },
             },
         });
+    }
+
+    /**
+     * Notify users who were assigned to the task (excluding the person who did the assign).
+     */
+    private notifyTaskAssigned(
+        task: { id: string; title: string; project?: { name: string } | null; assignedToId?: string | null; taskAssignees?: { user: { id: string } }[] },
+        assignedByUserId: string,
+    ) {
+        const assigneeIds = new Set<string>();
+        if (task.assignedToId) assigneeIds.add(task.assignedToId);
+        task.taskAssignees?.forEach((ta) => assigneeIds.add(ta.user.id));
+        assigneeIds.delete(assignedByUserId);
+        this.notifyTaskAssignedToUsers(task, [...assigneeIds]);
+    }
+
+    /**
+     * Send "Task assigned" notification to the given user ids.
+     */
+    private async notifyTaskAssignedToUsers(
+        task: { id: string; title: string; project?: { name: string } | null },
+        userIds: string[],
+    ) {
+        if (userIds.length === 0) return;
+        const projectName = task.project?.name ?? 'Project';
+        const message = `You were assigned to "${task.title}" in ${projectName}.`;
+        const link = `/dashboard/tasks/${task.id}`;
+        for (const userId of userIds) {
+            try {
+                await this.notificationsService.create(userId, {
+                    title: 'Task assigned',
+                    message,
+                    type: NotificationType.INFO,
+                    link,
+                });
+            } catch (err) {
+                console.error('Failed to send task assignment notification to', userId, err);
+            }
+        }
+    }
+
+    /**
+     * Notify assignees that the task was updated (excluding the user who made the edit).
+     * Lists only the fields that actually changed (compared before vs after).
+     */
+    private async notifyTaskUpdated(
+        task: { id: string; title: string; project?: { name: string } | null; assignedToId?: string | null; taskAssignees?: { user: { id: string } }[] },
+        updatedByUserId: string,
+        changedFields: string[],
+    ) {
+        const assigneeIds = new Set<string>();
+        if (task.assignedToId) assigneeIds.add(task.assignedToId);
+        task.taskAssignees?.forEach((ta) => assigneeIds.add(ta.user.id));
+        assigneeIds.delete(updatedByUserId);
+        if (assigneeIds.size === 0) return;
+        const projectName = task.project?.name ?? 'Project';
+        const changeText = changedFields.length > 0
+            ? ` was updated: ${changedFields.join(', ')}.`
+            : ' was updated.';
+        const message = `The task "${task.title}" in ${projectName}${changeText}`;
+        const link = `/dashboard/tasks/${task.id}`;
+        for (const userId of assigneeIds) {
+            try {
+                await this.notificationsService.create(userId, {
+                    title: 'Task updated',
+                    message,
+                    type: NotificationType.INFO,
+                    link,
+                });
+            } catch (err) {
+                console.error('Failed to send task updated notification to', userId, err);
+            }
+        }
     }
 }

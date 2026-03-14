@@ -1,6 +1,7 @@
 import {
     WebSocketGateway,
     WebSocketServer,
+    SubscribeMessage,
     OnGatewayConnection,
     OnGatewayDisconnect,
 } from '@nestjs/websockets';
@@ -20,6 +21,14 @@ export class NotificationsGateway
 
     handleConnection(client: Socket) {
         console.log(`Client connected: ${client.id}`);
+    }
+
+    @SubscribeMessage('register')
+    handleRegister(client: Socket, payload: { userId: string }) {
+        const userId = payload?.userId;
+        if (userId) {
+            this.registerUser(userId, client.id);
+        }
     }
 
     handleDisconnect(client: Socket) {

@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationType } from '@prisma/client';
+import { NotificationsGateway } from './notifications.gateway';
 
 @Injectable()
 export class NotificationsService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private gateway: NotificationsGateway,
+    ) {}
 
     async create(
         userId: string,
@@ -15,12 +19,14 @@ export class NotificationsService {
             link?: string;
         },
     ) {
-        return this.prisma.notification.create({
+        const notification = await this.prisma.notification.create({
             data: {
                 userId,
                 ...data,
             },
         });
+        this.gateway.sendNotification(userId, notification);
+        return notification;
     }
 
     async findAll(userId: string) {
@@ -33,10 +39,13 @@ export class NotificationsService {
         });
     }
 
-    async markAsRead(id: string) {
-        return this.prisma.notification.update({
-            where: { id },
+    async markAsRead(id: string, userId: string) {
+        return this.prisma.notification.updateMany({
+            where: { id, userId },
             data: { isRead: true },
+        }).then((r) => {
+            if (r.count === 0) return null;
+            return this.prisma.notification.findUnique({ where: { id } });
         });
     }
 

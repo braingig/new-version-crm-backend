@@ -45,10 +45,11 @@ export class TasksResolver {
     @Mutation(() => TaskType)
     @UseGuards(GqlAuthGuard)
     async updateTask(
+        @CurrentUser() user: any,
         @Args('id') id: string,
         @Args('input') input: UpdateTaskInput,
     ) {
-        return this.tasksService.update(id, input);
+        return this.tasksService.update(id, input, user.userId);
     }
 
     @Mutation(() => Boolean)

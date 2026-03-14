@@ -16,6 +16,13 @@ type CommentType {
   user: UserBasicType
 }
 
+input CreateNotificationInput {
+  link: String
+  message: String!
+  title: String!
+  type: NotificationType
+}
+
 input CreateProjectInput {
   budget: Float
   clientName: String
@@ -102,6 +109,7 @@ type Mutation {
   changeUserPassword(id: String!, newPassword: String!): Boolean!
   checkIn: TimesheetType!
   checkOut: TimesheetType!
+  createNotification(input: CreateNotificationInput!): NotificationDto!
   createProject(input: CreateProjectInput!): ProjectType!
   createSale(input: CreateSaleInput!): Sale!
   createTask(input: CreateTaskInput!): TaskType!
@@ -113,6 +121,8 @@ type Mutation {
   generatePayroll(employeeId: String!, month: DateTime!): Boolean!
   login(input: LoginInput!): AuthResponse!
   logout: Boolean!
+  markAllNotificationsAsRead: Boolean!
+  markNotificationAsRead(id: String!): NotificationDto
   refreshToken(input: RefreshTokenInput!): RefreshTokenResponse!
   register(input: RegisterInput!): AuthResponse!
   reportActivity(metadata: JSON, type: String!): Boolean!
@@ -123,6 +133,24 @@ type Mutation {
   updateTask(id: String!, input: UpdateTaskInput!): TaskType!
   updateTaskList(id: String!, input: UpdateTaskListInput!): TaskListType!
   updateUser(id: String!, input: UpdateUserInput!): UserType!
+}
+
+type NotificationDto {
+  createdAt: DateTime!
+  id: String!
+  isRead: Boolean!
+  link: String
+  message: String!
+  title: String!
+  type: NotificationType!
+  userId: String!
+}
+
+enum NotificationType {
+  ERROR
+  INFO
+  SUCCESS
+  WARNING
 }
 
 type ParentTaskInfoType {
@@ -189,6 +217,8 @@ type Query {
   employeeDailyActivity(employeeId: String, endDate: DateTime!, startDate: DateTime!): [EmployeeDailyActivityType!]!
   employeeWorkType: WorkType
   me: UserType!
+  notificationUnreadCount: Float!
+  notifications: [NotificationDto!]!
   payrolls(employeeId: String): [Payroll!]!
   project(id: String!): ProjectType!
   projects(filters: ProjectFiltersInput): [ProjectType!]!
