@@ -167,6 +167,7 @@ model Task {
   listId        String?
   title         String
   description   String?
+  note          String?
   status        TaskStatus   @default(TODO)
   priority      TaskPriority @default(MEDIUM)
   assignedToId  String?

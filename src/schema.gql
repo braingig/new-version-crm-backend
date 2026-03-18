@@ -53,6 +53,7 @@ input CreateTaskInput {
   dueDate: DateTime
   estimatedTime: Float
   listId: String
+  note: String
   parentTaskId: String
   priority: TaskPriority!
   projectId: String!
@@ -326,6 +327,7 @@ type TaskType {
   estimatedTime: Float
   id: String!
   listId: String
+  note: String
   parentTask: ParentTaskInfoType
   parentTaskId: String
   priority: TaskPriority!
@@ -399,6 +401,7 @@ input UpdateTaskInput {
   description: String
   dueDate: DateTime
   estimatedTime: Float
+  note: String
   priority: TaskPriority
   startDate: DateTime
   status: TaskStatus

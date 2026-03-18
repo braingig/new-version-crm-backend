@@ -18,6 +18,7 @@ export class TasksService {
             listId?: string;
             title: string;
             description?: string;
+            note?: string;
             priority: TaskPriority;
             assignedToId?: string;
             startDate?: Date;
@@ -248,6 +249,7 @@ export class TasksService {
         data: Partial<{
             title: string;
             description: string;
+            note: string;
             status: TaskStatus;
             priority: TaskPriority;
             assignedToId: string;
@@ -265,6 +267,7 @@ export class TasksService {
             select: {
                 title: true,
                 description: true,
+                note: true,
                 status: true,
                 priority: true,
                 startDate: true,
@@ -347,13 +350,14 @@ export class TasksService {
      * Compare previous task state with updated state and return only fields that actually changed.
      */
     private getActuallyChangedFields(
-        existing: { title: string; description: string | null; status: TaskStatus; priority: TaskPriority; startDate: Date | null; dueDate: Date | null; assignedToId: string | null; taskAssignees: { userId: string }[] },
-        updated: { title: string; description: string | null; status: TaskStatus; priority: TaskPriority; startDate: Date | null; dueDate: Date | null; assignedToId: string | null; taskAssignees: { user: { id: string } }[] },
+        existing: { title: string; description: string | null; note: string | null; status: TaskStatus; priority: TaskPriority; startDate: Date | null; dueDate: Date | null; assignedToId: string | null; taskAssignees: { userId: string }[] },
+        updated: { title: string; description: string | null; note: string | null; status: TaskStatus; priority: TaskPriority; startDate: Date | null; dueDate: Date | null; assignedToId: string | null; taskAssignees: { user: { id: string } }[] },
         previousAssigneeIds: Set<string>,
     ): string[] {
         const labels: string[] = [];
         if (existing.title !== updated.title) labels.push('Title');
         if ((existing.description ?? '') !== (updated.description ?? '')) labels.push('Description');
+        if ((existing.note ?? '') !== (updated.note ?? '')) labels.push('Note');
         if (existing.status !== updated.status) labels.push('Status');
         if (existing.priority !== updated.priority) labels.push('Priority');
         const existingStart = existing.startDate?.getTime();

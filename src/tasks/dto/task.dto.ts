@@ -28,6 +28,11 @@ export class CreateTaskInput {
     @IsString()
     description?: string;
 
+    @Field({ nullable: true })
+    @IsOptional()
+    @IsString()
+    note?: string;
+
     @Field(() => TaskPriority)
     @IsEnum(TaskPriority)
     priority: TaskPriority;
@@ -75,6 +80,11 @@ export class UpdateTaskInput {
     @IsOptional()
     @IsString()
     description?: string;
+
+    @Field({ nullable: true })
+    @IsOptional()
+    @IsString()
+    note?: string;
 
     @Field(() => TaskStatus, { nullable: true })
     @IsOptional()
@@ -180,6 +190,9 @@ export class TaskType {
 
     @Field({ nullable: true })
     description?: string;
+
+    @Field({ nullable: true })
+    note?: string;
 
     @Field(() => TaskStatus)
     status: TaskStatus;
