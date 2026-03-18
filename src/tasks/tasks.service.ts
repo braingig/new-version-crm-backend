@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { TaskStatus, TaskPriority } from '@prisma/client';
+import { TaskStatus, TaskPriority, UserRole } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '@prisma/client';
 
@@ -296,6 +296,7 @@ export class TasksService {
             data: rest,
             include: {
                 project: true,
+                createdBy: { select: { id: true } },
                 assignedTo: {
                     select: {
                         id: true,
@@ -342,6 +343,9 @@ export class TasksService {
         if (updatedByUserId && existing) {
             const changedFields = this.getActuallyChangedFields(existing, updated, previousAssigneeIds);
             this.notifyTaskUpdated(updated, updatedByUserId, changedFields);
+            if (changedFields.includes('Status')) {
+                this.notifyTaskStatusChangeToAdminAndAssigner(updated, updatedByUserId);
+            }
         }
         return updated;
     }
@@ -491,6 +495,47 @@ export class TasksService {
                 });
             } catch (err) {
                 console.error('Failed to send task assignment notification to', userId, err);
+            }
+        }
+    }
+
+    /**
+     * When task status is updated by an employee, notify admin(s) and the person who
+     * assigned/created the task. If admin and assigner are the same person, send only
+     * one notification. Excludes the user who made the update.
+     */
+    private async notifyTaskStatusChangeToAdminAndAssigner(
+        task: { id: string; title: string; project?: { name: string } | null; createdBy?: { id: string } | null },
+        updatedByUserId: string,
+    ) {
+        const notifyUserIds = new Set<string>();
+
+        const adminUsers = await this.prisma.user.findMany({
+            where: { role: UserRole.ADMIN },
+            select: { id: true },
+        });
+        adminUsers.forEach((u) => notifyUserIds.add(u.id));
+
+        if (task.createdBy?.id) {
+            notifyUserIds.add(task.createdBy.id);
+        }
+
+        notifyUserIds.delete(updatedByUserId);
+        if (notifyUserIds.size === 0) return;
+
+        const projectName = task.project?.name ?? 'Project';
+        const message = `Task "${task.title}" in ${projectName} has been updated (status changed).`;
+        const link = `/dashboard/tasks/${task.id}`;
+        for (const userId of notifyUserIds) {
+            try {
+                await this.notificationsService.create(userId, {
+                    title: 'Task status updated',
+                    message,
+                    type: NotificationType.INFO,
+                    link,
+                });
+            } catch (err) {
+                console.error('Failed to send task status change notification to', userId, err);
             }
         }
     }
