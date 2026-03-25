@@ -41,6 +41,11 @@ export class CreateProjectInput {
     @IsString()
     clientName?: string;
 
+    @Field({ nullable: true })
+    @IsOptional()
+    @IsString()
+    note?: string;
+
     @Field(() => ProjectStatus, { nullable: true })
     @IsOptional()
     @IsEnum(ProjectStatus)
@@ -88,6 +93,11 @@ export class UpdateProjectInput {
     @IsOptional()
     @IsString()
     clientName?: string;
+
+    @Field({ nullable: true })
+    @IsOptional()
+    @IsString()
+    note?: string;
 }
 
 @InputType()
@@ -120,6 +130,9 @@ export class ProjectType {
 
     @Field({ nullable: true })
     description?: string;
+
+    @Field({ nullable: true })
+    note?: string;
 
     @Field()
     budget: number;

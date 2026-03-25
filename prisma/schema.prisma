@@ -126,6 +126,7 @@ model Project {
   id          String        @id @default(uuid())
   name        String
   description String?
+  note        String?
   budget      Float
   hourlyRate  Float?
   status      ProjectStatus @default(PLANNING)

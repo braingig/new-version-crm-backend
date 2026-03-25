@@ -30,6 +30,7 @@ input CreateProjectInput {
   endDate: DateTime
   hourlyRate: Float
   name: String!
+  note: String
   startDate: DateTime
   status: ProjectStatus
 }
@@ -208,6 +209,7 @@ type ProjectType {
   hourlyRate: Float
   id: String!
   name: String!
+  note: String
   startDate: DateTime!
   status: ProjectStatus!
   updatedAt: DateTime!
@@ -391,6 +393,7 @@ input UpdateProjectInput {
   endDate: DateTime
   hourlyRate: Float
   name: String
+  note: String
   startDate: DateTime
   status: ProjectStatus
 }

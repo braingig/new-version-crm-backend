@@ -11,6 +11,7 @@ export class ProjectsService {
         data: {
             name: string;
             description?: string;
+            note?: string;
             budget?: number;
             hourlyRate?: number;
             startDate?: Date;
@@ -96,6 +97,7 @@ export class ProjectsService {
         data: Partial<{
             name: string;
             description: string;
+            note: string;
             budget: number;
             hourlyRate: number;
             status: ProjectStatus;
