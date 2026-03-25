@@ -9,10 +9,21 @@ async function bootstrap() {
     const configService = app.get(ConfigService);
 
     // Enable CORS: set CORS_ORIGIN in .env or in your platform's env (e.g. Easypanel)
+    // Supports:
+    // - single origin: "https://portal.braingig.com"
+    // - multiple origins: "https://portal.braingig.com,http://localhost:3000"
+    // - wildcard: "*"
+    const rawCorsOrigin = process.env.CORS_ORIGIN?.trim();
+    const corsOrigins =
+        !rawCorsOrigin || rawCorsOrigin === '*'
+            ? rawCorsOrigin
+            : rawCorsOrigin
+                  .split(',')
+                  .map((o) => o.trim())
+                  .filter(Boolean);
+
     app.enableCors({
-        origin: process.env.CORS_ORIGIN,
-        // origin: 'http://localhost:3000',
-        // origin: 'https://portal.braingig.com',
+        origin: corsOrigins,
         credentials: true,
     });
 
