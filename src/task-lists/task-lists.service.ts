@@ -34,8 +34,15 @@ export class TaskListsService {
     }
 
     async delete(id: string) {
-        await this.prisma.taskList.delete({
-            where: { id },
+        await this.prisma.$transaction(async (tx) => {
+            // Deleting a list should remove tasks in that list as well.
+            // Subtasks are deleted via Task.parentTask onDelete: Cascade.
+            await tx.task.deleteMany({
+                where: { listId: id },
+            });
+            await tx.taskList.delete({
+                where: { id },
+            });
         });
         return true;
     }
