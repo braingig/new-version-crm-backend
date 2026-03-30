@@ -98,6 +98,11 @@ type EmployeeType {
   workType: WorkType
 }
 
+type EmployeeWeeklyScheduleRow {
+  plan: WeeklyWorkPlanType
+  user: UserBasicType!
+}
+
 """JSON scalar type"""
 scalar JSON
 
@@ -120,6 +125,7 @@ type Mutation {
   deleteTask(id: String!): Boolean!
   deleteTaskList(id: String!): Boolean!
   deleteUser(id: String!): Boolean!
+  deleteWeeklyWorkPlan(weekStart: DateTime!): Boolean!
   generatePayroll(employeeId: String!, month: DateTime!): Boolean!
   login(input: LoginInput!): AuthResponse!
   logout: Boolean!
@@ -128,6 +134,7 @@ type Mutation {
   refreshToken(input: RefreshTokenInput!): RefreshTokenResponse!
   register(input: RegisterInput!): AuthResponse!
   reportActivity(metadata: JSON, type: String!): Boolean!
+  setWeeklyWorkPlan(input: SetWeeklyWorkPlanInput!): WeeklyWorkPlanType!
   startTimeEntry(input: StartTimeEntryInput!): TimeEntryType!
   stopTimeEntry(effectiveDurationSeconds: Int): TimeEntryType!
   updateEmployeeWorkType(workType: String!): EmployeeType!
@@ -220,6 +227,8 @@ type Query {
   employeeDailyActivity(employeeId: String, endDate: DateTime!, startDate: DateTime!): [EmployeeDailyActivityType!]!
   employeeWorkType: WorkType
   me: UserType!
+  myWeeklyWorkPlan(weekStart: DateTime!): WeeklyWorkPlanType
+  myWeeklyWorkPlanForDate(referenceDate: DateTime!): WeeklyWorkPlanType
   notificationUnreadCount: Float!
   notifications: [NotificationDto!]!
   payrolls(employeeId: String): [Payroll!]!
@@ -230,6 +239,8 @@ type Query {
   taskLists(projectId: String!): [TaskListType!]!
   tasks(filters: TaskFiltersInput): [TaskType!]!
   tasksForSelection(filters: TaskFiltersInput): [TaskType!]!
+  teamWeeklySchedule(weekStart: DateTime!): [EmployeeWeeklyScheduleRow!]!
+  teamWeeklyScheduleForDate(referenceDate: DateTime!): [EmployeeWeeklyScheduleRow!]!
   timeEntries(employeeId: String, taskId: String, taskIds: [String!]): [TimeEntryType!]!
   timesheets(employeeId: String, endDate: DateTime, startDate: DateTime): [TimesheetType!]!
   todaySessions: [TimesheetType!]!
@@ -278,6 +289,12 @@ type Sale {
   phone: String
   source: String
   updatedAt: DateTime!
+}
+
+input SetWeeklyWorkPlanInput {
+  slots: [WeeklyWorkSlotInput!]!
+  weekStart: DateTime!
+  weekendDays: [Int!]!
 }
 
 input StartTimeEntryInput {
@@ -465,6 +482,27 @@ type UserType {
   skills: [String!]!
   status: String!
   updatedAt: DateTime!
+}
+
+type WeeklyWorkPlanType {
+  id: String!
+  slots: [WeeklyWorkSlotType!]!
+  userId: String!
+  weekStart: DateTime!
+  weekendDays: [Int!]!
+}
+
+input WeeklyWorkSlotInput {
+  dayOfWeek: Int!
+  endMinutes: Int!
+  startMinutes: Int!
+}
+
+type WeeklyWorkSlotType {
+  dayOfWeek: Int!
+  endMinutes: Int!
+  id: String!
+  startMinutes: Int!
 }
 
 """Employee work type classification"""

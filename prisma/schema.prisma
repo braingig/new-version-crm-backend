@@ -117,6 +117,8 @@ model User {
 
 activityEvents  ActivityEvent[]
 
+  weeklyWorkPlans WeeklyWorkPlan[]
+
   @@index([email])
   @@index([role])
   @@index([status])
@@ -363,4 +365,36 @@ model ActivityEvent {
   employee User @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([employeeId, createdAt])
+}
+
+/// One row per user per calendar week (weekStart = Monday date in their submitted timezone-neutral date).
+model WeeklyWorkPlan {
+  id           String   @id @default(uuid())
+  userId       String
+  /// Monday of the week (date only; use UTC date storage).
+  weekStart    DateTime @db.Date
+  /// ISO weekday numbers: 1 = Monday … 7 = Sunday. Days treated as non-working (weekend).
+  weekendDays  Int[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slots WeeklyWorkSlot[]
+
+  @@unique([userId, weekStart])
+  @@index([weekStart])
+}
+
+/// Multiple intervals per day allowed. dayOfWeek: 1 = Monday … 7 = Sunday (ISO).
+model WeeklyWorkSlot {
+  id               String @id @default(uuid())
+  weeklyWorkPlanId String
+  dayOfWeek        Int
+  /// Minutes from midnight (0–1439 typically; end exclusive up to 1440 for 24:00 if needed)
+  startMinutes     Int
+  endMinutes       Int
+
+  plan WeeklyWorkPlan @relation(fields: [weeklyWorkPlanId], references: [id], onDelete: Cascade)
+
+  @@index([weeklyWorkPlanId])
 }

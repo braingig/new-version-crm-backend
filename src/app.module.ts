@@ -17,6 +17,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { ActivityLogsModule } from './activity-logs/activity-logs.module';
 import { ActivityModule } from './activity/activity.module';
 import { TaskListsModule } from './task-lists/task-lists.module';
+import { WorkScheduleModule } from './work-schedule/work-schedule.module';
 
 @Module({
     imports: [
@@ -50,6 +51,7 @@ import { TaskListsModule } from './task-lists/task-lists.module';
         NotificationsModule,
         ActivityLogsModule,
         ActivityModule,
+        WorkScheduleModule,
     ],
 })
 export class AppModule { }
