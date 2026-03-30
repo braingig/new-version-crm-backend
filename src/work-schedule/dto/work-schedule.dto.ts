@@ -73,6 +73,12 @@ export class WeeklyWorkPlanType {
 
     @Field(() => [WeeklyWorkSlotType])
     slots: WeeklyWorkSlotType[];
+
+    @Field()
+    createdAt: Date;
+
+    @Field()
+    updatedAt: Date;
 }
 
 @ObjectType()

@@ -485,8 +485,10 @@ type UserType {
 }
 
 type WeeklyWorkPlanType {
+  createdAt: DateTime!
   id: String!
   slots: [WeeklyWorkSlotType!]!
+  updatedAt: DateTime!
   userId: String!
   weekStart: DateTime!
   weekendDays: [Int!]!
