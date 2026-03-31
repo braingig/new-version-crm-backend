@@ -307,6 +307,39 @@ export class TimesheetsService {
         });
     }
 
+    /** All users with an open timer (endTime null). Active employees only. */
+    async getActiveTimersTeamwide(): Promise<
+        Array<{
+            entryId: string;
+            employeeId: string;
+            employeeName: string;
+            taskId?: string;
+            taskTitle?: string;
+            startTime: Date;
+        }>
+    > {
+        const entries = await this.prisma.timeEntry.findMany({
+            where: {
+                endTime: null,
+                employee: { status: 'ACTIVE' },
+            },
+            include: {
+                employee: { select: { id: true, name: true } },
+                task: { select: { id: true, title: true } },
+            },
+            orderBy: { startTime: 'asc' },
+        });
+
+        return entries.map((e) => ({
+            entryId: e.id,
+            employeeId: e.employeeId,
+            employeeName: e.employee.name,
+            taskId: e.taskId ?? undefined,
+            taskTitle: e.task?.title ?? undefined,
+            startTime: e.startTime,
+        }));
+    }
+
     async getTodayTimesheet(employeeId: string) {
         const today = new Date();
         today.setHours(0, 0, 0, 0);

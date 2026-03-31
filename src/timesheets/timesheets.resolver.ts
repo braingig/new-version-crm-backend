@@ -4,7 +4,7 @@ import { UseGuards, BadRequestException } from '@nestjs/common';
 import { TimesheetsService } from './timesheets.service';
 import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { TimesheetType, TimeEntryType, StartTimeEntryInput, WorkType, EmployeeType, EmployeeDailyActivityType } from './dto/timesheet.dto';
+import { TimesheetType, TimeEntryType, StartTimeEntryInput, WorkType, EmployeeType, EmployeeDailyActivityType, ActiveTimerRowType } from './dto/timesheet.dto';
 
 @Resolver()
 export class TimesheetsResolver {
@@ -84,6 +84,12 @@ export class TimesheetsResolver {
     @UseGuards(GqlAuthGuard)
     async activeTimeEntry(@CurrentUser() user: any) {
         return this.timesheetsService.getActiveTimeEntry(user.userId);
+    }
+
+    @Query(() => [ActiveTimerRowType])
+    @UseGuards(GqlAuthGuard)
+    async activeTeamTimers() {
+        return this.timesheetsService.getActiveTimersTeamwide();
     }
 
     @Query(() => TimesheetType, { nullable: true })

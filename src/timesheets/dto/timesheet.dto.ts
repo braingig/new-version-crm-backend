@@ -155,6 +155,28 @@ export class ProjectTimeSummaryType {
     seconds: number;
 }
 
+/** One row per user with a timer currently running (no end time). For dashboard presence. */
+@ObjectType()
+export class ActiveTimerRowType {
+    @Field()
+    entryId: string;
+
+    @Field()
+    employeeId: string;
+
+    @Field()
+    employeeName: string;
+
+    @Field({ nullable: true })
+    taskId?: string;
+
+    @Field({ nullable: true })
+    taskTitle?: string;
+
+    @Field()
+    startTime: Date;
+}
+
 @ObjectType()
 export class EmployeeDailyActivityType {
     @Field()

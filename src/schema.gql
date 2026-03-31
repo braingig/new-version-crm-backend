@@ -2,6 +2,15 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------
 
+type ActiveTimerRowType {
+  employeeId: String!
+  employeeName: String!
+  entryId: String!
+  startTime: DateTime!
+  taskId: String
+  taskTitle: String
+}
+
 type AuthResponse {
   accessToken: String!
   refreshToken: String!
@@ -223,6 +232,7 @@ type ProjectType {
 }
 
 type Query {
+  activeTeamTimers: [ActiveTimerRowType!]!
   activeTimeEntry: TimeEntryType
   employeeDailyActivity(employeeId: String, endDate: DateTime!, startDate: DateTime!): [EmployeeDailyActivityType!]!
   employeeWorkType: WorkType
