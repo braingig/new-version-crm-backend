@@ -162,6 +162,7 @@ export class WorkScheduleService {
                 userId,
                 weekStart: { gte: earliest, lte: ref },
             },
+            orderBy: { weekStart: 'desc' },
             include: {
                 slots: { orderBy: [{ dayOfWeek: 'asc' }, { startMinutes: 'asc' }] },
             },
@@ -169,15 +170,17 @@ export class WorkScheduleService {
 
         // A 7-day window: plan covers referenceDate if:
         //   plan.weekStart <= ref < plan.weekStart + 7
+        // Multiple plans may overlap the same referenceDate if a user changes their weekend pattern
+        // (which changes computed weekStart). Pick the most recent (max weekStart) that covers ref.
         const chosen =
-            plans
-                .map((p) => {
-                    const start = p.weekStart;
-                    const endExclusive = this.addDaysUTCDateOnly(start, 7);
-                    return { plan: p, start, endExclusive };
-                })
-                .find(({ start, endExclusive }) => start.getTime() <= ref.getTime() && ref.getTime() < endExclusive.getTime())
-                ?.plan ?? null;
+            plans.find((p) => {
+                const start = p.weekStart;
+                const endExclusive = this.addDaysUTCDateOnly(start, 7);
+                return (
+                    start.getTime() <= ref.getTime() &&
+                    ref.getTime() < endExclusive.getTime()
+                );
+            }) ?? null;
 
         return chosen;
     }
@@ -194,6 +197,20 @@ export class WorkScheduleService {
         this.validateSlots(slots, weekendSet);
 
         return this.prisma.$transaction(async (tx) => {
+            // If the user's weekend pattern changes, the computed weekStart can shift (e.g. Sat vs Mon),
+            // which can create overlapping 7-day plans for the same reference date.
+            // To keep reads deterministic, ensure there's only ONE plan covering any given date
+            // by deleting any other plans whose weekStart is within ±6 days (overlaps this 7-day window).
+            const overlapStart = this.addDaysUTCDateOnly(ws, -6);
+            const overlapEnd = this.addDaysUTCDateOnly(ws, 6);
+            await tx.weeklyWorkPlan.deleteMany({
+                where: {
+                    userId,
+                    weekStart: { gte: overlapStart, lte: overlapEnd },
+                    NOT: { weekStart: ws },
+                },
+            });
+
             const plan = await tx.weeklyWorkPlan.upsert({
                 where: { userId_weekStart: { userId, weekStart: ws } },
                 create: {
@@ -289,6 +306,7 @@ export class WorkScheduleService {
                 userId: { in: userIds },
                 weekStart: { gte: earliest, lte: ref },
             },
+            orderBy: { weekStart: 'desc' },
             include: {
                 slots: {
                     orderBy: [{ dayOfWeek: 'asc' }, { startMinutes: 'asc' }],
@@ -296,18 +314,26 @@ export class WorkScheduleService {
             },
         });
 
-        const plansByUser = new Map(plans.map((p) => [p.userId, p]));
+        const plansByUser = new Map<string, typeof plans>();
+        for (const p of plans) {
+            const list = plansByUser.get(p.userId) ?? [];
+            list.push(p);
+            plansByUser.set(p.userId, list);
+        }
 
-        // Note: for the 7-day window, each user should have at most one matching plan.
-        // We still compute the cover check to be safe.
         const planForRef = (userId: string) => {
-            const candidate = plansByUser.get(userId) ?? null;
-            if (!candidate) return null;
-            const start = candidate.weekStart;
-            const endExclusive = this.addDaysUTCDateOnly(start, 7);
-            return start.getTime() <= ref.getTime() && ref.getTime() < endExclusive.getTime()
-                ? candidate
-                : null;
+            const candidates = plansByUser.get(userId) ?? [];
+            if (candidates.length === 0) return null;
+            return (
+                candidates.find((candidate) => {
+                    const start = candidate.weekStart;
+                    const endExclusive = this.addDaysUTCDateOnly(start, 7);
+                    return (
+                        start.getTime() <= ref.getTime() &&
+                        ref.getTime() < endExclusive.getTime()
+                    );
+                }) ?? null
+            );
         };
 
         return users.map((u) => ({
