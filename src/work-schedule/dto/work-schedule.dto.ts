@@ -1,16 +1,18 @@
 import { InputType, Field, ObjectType, Int } from '@nestjs/graphql';
-import { IsArray, IsInt, ArrayMinSize, Min, Max, ValidateNested, IsDate } from 'class-validator';
+import {
+    IsArray,
+    IsInt,
+    ArrayMinSize,
+    Min,
+    Max,
+    ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { UserBasicType } from '../../projects/dto/project.dto';
 
+/** One time range; applies to every working day (non-weekend) the same way. */
 @InputType()
-export class WeeklyWorkSlotInput {
-    @Field(() => Int)
-    @IsInt()
-    @Min(1)
-    @Max(7)
-    dayOfWeek: number;
-
+export class WorkIntervalInput {
     @Field(() => Int)
     @IsInt()
     @Min(0)
@@ -25,30 +27,23 @@ export class WeeklyWorkSlotInput {
 }
 
 @InputType()
-export class SetWeeklyWorkPlanInput {
-    @Field()
-    @IsDate()
-    @Type(() => Date)
-    weekStart: Date;
-
+export class SetWorkScheduleInput {
     @Field(() => [Int])
     @IsArray()
+    @ArrayMinSize(1)
     @IsInt({ each: true })
     weekendDays: number[];
 
-    @Field(() => [WeeklyWorkSlotInput])
+    @Field(() => [WorkIntervalInput])
     @ValidateNested({ each: true })
-    @Type(() => WeeklyWorkSlotInput)
-    slots: WeeklyWorkSlotInput[];
+    @Type(() => WorkIntervalInput)
+    intervals: WorkIntervalInput[];
 }
 
 @ObjectType()
-export class WeeklyWorkSlotType {
+export class WorkIntervalType {
     @Field()
     id: string;
-
-    @Field(() => Int)
-    dayOfWeek: number;
 
     @Field(() => Int)
     startMinutes: number;
@@ -58,34 +53,25 @@ export class WeeklyWorkSlotType {
 }
 
 @ObjectType()
-export class WeeklyWorkPlanType {
-    @Field()
-    id: string;
-
+export class WorkScheduleType {
     @Field()
     userId: string;
-
-    @Field()
-    weekStart: Date;
 
     @Field(() => [Int])
     weekendDays: number[];
 
-    @Field(() => [WeeklyWorkSlotType])
-    slots: WeeklyWorkSlotType[];
-
-    @Field()
-    createdAt: Date;
+    @Field(() => [WorkIntervalType])
+    intervals: WorkIntervalType[];
 
     @Field()
     updatedAt: Date;
 }
 
 @ObjectType()
-export class EmployeeWeeklyScheduleRow {
+export class TeamWorkScheduleRow {
     @Field(() => UserBasicType)
     user: UserBasicType;
 
-    @Field(() => WeeklyWorkPlanType, { nullable: true })
-    plan: WeeklyWorkPlanType | null;
+    @Field(() => WorkScheduleType)
+    schedule: WorkScheduleType;
 }

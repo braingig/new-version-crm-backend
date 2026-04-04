@@ -5,43 +5,13 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserRole } from '@prisma/client';
-import { WeeklyWorkSlotInput } from './dto/work-schedule.dto';
+import { WorkIntervalInput } from './dto/work-schedule.dto';
 
 const MANAGER_ROLES: UserRole[] = [UserRole.ADMIN, UserRole.TEAM_LEAD, UserRole.HR];
 
 @Injectable()
 export class WorkScheduleService {
     constructor(private prisma: PrismaService) {}
-
-    /** Normalize to UTC midnight of the calendar date (date-only semantics). */
-    normalizeWeekStartDate(input: Date): Date {
-        const d = new Date(input);
-        if (Number.isNaN(d.getTime())) {
-            throw new BadRequestException('Invalid weekStart date');
-        }
-        return new Date(
-            Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
-        );
-    }
-
-    /** Add days to a date-only value (UTC midnight in practice). */
-    private addDaysUTCDateOnly(d: Date, days: number): Date {
-        const out = new Date(d);
-        out.setUTCDate(out.getUTCDate() + days);
-        return out;
-    }
-
-    /** JS ISO day: 1=Mon ... 7=Sun */
-    private isoDayFromDateOnly(d: Date): number {
-        // d is expected to be date-only at UTC midnight; using UTC avoids TZ surprises.
-        const day = d.getUTCDay(); // 0=Sun..6=Sat
-        return day === 0 ? 7 : day;
-    }
-
-    private isWeekendBoundary(dayIso: number, isWeekend: boolean[]): boolean {
-        const next = dayIso === 7 ? 1 : dayIso + 1;
-        return isWeekend[dayIso] && !isWeekend[next];
-    }
 
     assertCanViewTeam(role: UserRole) {
         if (!MANAGER_ROLES.includes(role)) {
@@ -51,10 +21,31 @@ export class WorkScheduleService {
         }
     }
 
+    assertCanManageOthersSchedule(role: UserRole) {
+        if (!MANAGER_ROLES.includes(role)) {
+            throw new ForbiddenException(
+                'You do not have permission to edit other users’ schedules',
+            );
+        }
+    }
+
+    /** Previous ISO day (Mon=1 … Sun=7); wraps so Monday follows Sunday. */
+    private prevIsoDay(iso: number): number {
+        return iso === 1 ? 7 : iso - 1;
+    }
+
+    /**
+     * Weekend days must be one contiguous arc on the week circle (Mon→…→Sun→Mon).
+     * Examples: Fri only; Fri–Sat; Fri–Sat–Sun; Sat–Sun; Sun only; Sat–Sun–Mon.
+     * Invalid: Fri+Sun without Sat (two separate runs), or all 7 days.
+     *
+     * We count how many times we switch from a working day to a weekend day when
+     * walking Mon→Tue→…→Sun→Mon — that must be exactly once.
+     */
     private validateWeekendDays(weekendDays: number[]) {
         if (!Array.isArray(weekendDays) || weekendDays.length === 0) {
             throw new BadRequestException(
-                'weekendDays must contain at least 1 day (ISO: 1=Monday ... 7=Sunday)',
+                'weekendDays must contain at least 1 day (ISO: 1=Monday … 7=Sunday)',
             );
         }
 
@@ -71,39 +62,32 @@ export class WorkScheduleService {
             throw new BadRequestException('weekendDays must not contain duplicates');
         }
 
-        // Require a single consecutive weekend block in the 7-day cycle.
-        // We do this by counting "weekend end" boundaries: day is weekend but next day is not.
-        // For a single consecutive block there should be exactly 1 boundary.
-        const isWeekend = Array.from({ length: 8 }, () => false); // 0..7, we use 1..7
+        if (weekendDays.length >= 7) {
+            throw new BadRequestException(
+                'At least one weekday is required; weekend cannot cover all 7 days.',
+            );
+        }
+
+        const isWeekend = Array.from({ length: 8 }, () => false);
         for (const d of weekendDays) isWeekend[d] = true;
 
-        let boundaries = 0;
-        for (let dayIso = 1; dayIso <= 7; dayIso++) {
-            if (this.isWeekendBoundary(dayIso, isWeekend)) boundaries += 1;
+        let weekendStarts = 0;
+        for (let i = 1; i <= 7; i++) {
+            const prev = this.prevIsoDay(i);
+            if (!isWeekend[prev] && isWeekend[i]) weekendStarts += 1;
         }
-        if (boundaries !== 1) {
+
+        if (weekendStarts !== 1) {
             throw new BadRequestException(
-                'weekendDays must form one consecutive block (e.g. Fri or Fri-Sat or Sat-Sun).',
+                'Weekend must be one uninterrupted run of days on the week, including across Sun→Mon (e.g. Fri; Fri–Sat; Fri–Sat–Sun; Sat–Sun; Sun; Sat–Sun–Mon). Gaps like Fri+Sun without Sat are not allowed.',
             );
         }
     }
 
-    private validateSlots(
-        slots: WeeklyWorkSlotInput[],
-        weekendDaySet: Set<number>,
-    ) {
-        const byDay = new Map<number, { start: number; end: number }[]>();
-        for (const s of slots) {
-            if (!Number.isInteger(s.dayOfWeek) || s.dayOfWeek < 1 || s.dayOfWeek > 7) {
-                throw new BadRequestException(
-                    'Each slot dayOfWeek must be 1–7 (ISO: Mon–Sun)',
-                );
-            }
-            if (weekendDaySet.has(s.dayOfWeek)) {
-                throw new BadRequestException(
-                    `Cannot add working hours on weekend day ${s.dayOfWeek}`,
-                );
-            }
+    /** Same intervals every working day; no overlaps after sorting by start. */
+    private validateIntervals(intervals: WorkIntervalInput[]) {
+        const list = [...intervals];
+        for (const s of list) {
             if (
                 !Number.isInteger(s.startMinutes) ||
                 !Number.isInteger(s.endMinutes) ||
@@ -112,154 +96,98 @@ export class WorkScheduleService {
                 s.startMinutes >= s.endMinutes
             ) {
                 throw new BadRequestException(
-                    'Each slot needs 0 ≤ startMinutes < endMinutes ≤ 1440',
+                    'Each interval needs 0 ≤ startMinutes < endMinutes ≤ 1440',
                 );
             }
-            if (!byDay.has(s.dayOfWeek)) byDay.set(s.dayOfWeek, []);
-            byDay.get(s.dayOfWeek)!.push({ start: s.startMinutes, end: s.endMinutes });
         }
-        const dayNames = [
-            '',
-            'Monday',
-            'Tuesday',
-            'Wednesday',
-            'Thursday',
-            'Friday',
-            'Saturday',
-            'Sunday',
-        ];
-        for (const [dayIso, intervals] of byDay) {
-            intervals.sort((a, b) => a.start - b.start);
-            for (let i = 1; i < intervals.length; i++) {
-                if (intervals[i].start < intervals[i - 1].end) {
-                    const label = dayNames[dayIso] ?? `Day ${dayIso}`;
-                    throw new BadRequestException(
-                        `${label}: overlapping time ranges (check AM vs PM on start/end times).`,
-                    );
-                }
+        list.sort((a, b) => a.startMinutes - b.startMinutes);
+        for (let i = 1; i < list.length; i++) {
+            if (list[i].startMinutes < list[i - 1].endMinutes) {
+                throw new BadRequestException(
+                    'Intervals must not overlap (check AM vs PM on start/end times).',
+                );
             }
         }
     }
 
-    async myWeeklyWorkPlan(userId: string, weekStart: Date) {
-        const ws = this.normalizeWeekStartDate(weekStart);
-        return this.prisma.weeklyWorkPlan.findUnique({
-            where: {
-                userId_weekStart: { userId, weekStart: ws },
-            },
-            include: {
-                slots: { orderBy: [{ dayOfWeek: 'asc' }, { startMinutes: 'asc' }] },
-            },
-        });
-    }
-
-    async myWeeklyWorkPlanForDate(userId: string, referenceDate: Date) {
-        const ref = this.normalizeWeekStartDate(referenceDate);
-        const earliest = this.addDaysUTCDateOnly(ref, -6);
-
-        const plans = await this.prisma.weeklyWorkPlan.findMany({
-            where: {
-                userId,
-                weekStart: { gte: earliest, lte: ref },
-            },
-            orderBy: { weekStart: 'desc' },
-            include: {
-                slots: { orderBy: [{ dayOfWeek: 'asc' }, { startMinutes: 'asc' }] },
+    async getWorkSchedule(userId: string) {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: {
+                id: true,
+                weekendDays: true,
+                updatedAt: true,
+                workIntervals: {
+                    orderBy: [{ startMinutes: 'asc' }],
+                },
             },
         });
-
-        // A 7-day window: plan covers referenceDate if:
-        //   plan.weekStart <= ref < plan.weekStart + 7
-        // Multiple plans may overlap the same referenceDate if a user changes their weekend pattern
-        // (which changes computed weekStart). Pick the most recent (max weekStart) that covers ref.
-        const chosen =
-            plans.find((p) => {
-                const start = p.weekStart;
-                const endExclusive = this.addDaysUTCDateOnly(start, 7);
-                return (
-                    start.getTime() <= ref.getTime() &&
-                    ref.getTime() < endExclusive.getTime()
-                );
-            }) ?? null;
-
-        return chosen;
+        if (!user) {
+            throw new BadRequestException('User not found');
+        }
+        return {
+            userId: user.id,
+            weekendDays: user.weekendDays,
+            intervals: user.workIntervals,
+            updatedAt: user.updatedAt,
+        };
     }
 
-    async setWeeklyWorkPlan(
-        userId: string,
-        weekStart: Date,
+    async setWorkSchedule(
+        targetUserId: string,
+        requesterId: string,
+        requesterRole: UserRole,
         weekendDays: number[],
-        slots: WeeklyWorkSlotInput[],
+        intervals: WorkIntervalInput[],
     ) {
-        const ws = this.normalizeWeekStartDate(weekStart);
+        if (targetUserId !== requesterId) {
+            this.assertCanManageOthersSchedule(requesterRole);
+        }
+
         this.validateWeekendDays(weekendDays);
-        const weekendSet = new Set(weekendDays);
-        this.validateSlots(slots, weekendSet);
+        this.validateIntervals(intervals);
 
         return this.prisma.$transaction(async (tx) => {
-            // If the user's weekend pattern changes, the computed weekStart can shift (e.g. Sat vs Mon),
-            // which can create overlapping 7-day plans for the same reference date.
-            // To keep reads deterministic, ensure there's only ONE plan covering any given date
-            // by deleting any other plans whose weekStart is within ±6 days (overlaps this 7-day window).
-            const overlapStart = this.addDaysUTCDateOnly(ws, -6);
-            const overlapEnd = this.addDaysUTCDateOnly(ws, 6);
-            await tx.weeklyWorkPlan.deleteMany({
-                where: {
-                    userId,
-                    weekStart: { gte: overlapStart, lte: overlapEnd },
-                    NOT: { weekStart: ws },
-                },
+            await tx.user.update({
+                where: { id: targetUserId },
+                data: { weekendDays },
             });
 
-            const plan = await tx.weeklyWorkPlan.upsert({
-                where: { userId_weekStart: { userId, weekStart: ws } },
-                create: {
-                    userId,
-                    weekStart: ws,
-                    weekendDays,
-                },
-                update: {
-                    weekendDays,
-                },
-            });
+            await tx.userWorkInterval.deleteMany({ where: { userId: targetUserId } });
 
-            await tx.weeklyWorkSlot.deleteMany({
-                where: { weeklyWorkPlanId: plan.id },
-            });
-
-            if (slots.length > 0) {
-                await tx.weeklyWorkSlot.createMany({
-                    data: slots.map((s) => ({
-                        weeklyWorkPlanId: plan.id,
-                        dayOfWeek: s.dayOfWeek,
+            if (intervals.length > 0) {
+                await tx.userWorkInterval.createMany({
+                    data: intervals.map((s) => ({
+                        userId: targetUserId,
                         startMinutes: s.startMinutes,
                         endMinutes: s.endMinutes,
                     })),
                 });
             }
 
-            return tx.weeklyWorkPlan.findUnique({
-                where: { id: plan.id },
-                include: {
-                    slots: {
-                        orderBy: [{ dayOfWeek: 'asc' }, { startMinutes: 'asc' }],
+            const user = await tx.user.findUnique({
+                where: { id: targetUserId },
+                select: {
+                    id: true,
+                    weekendDays: true,
+                    updatedAt: true,
+                    workIntervals: {
+                        orderBy: [{ startMinutes: 'asc' }],
                     },
                 },
             });
+
+            return {
+                userId: user!.id,
+                weekendDays: user!.weekendDays,
+                intervals: user!.workIntervals,
+                updatedAt: user!.updatedAt,
+            };
         });
     }
 
-    async deleteWeeklyWorkPlan(userId: string, weekStart: Date) {
-        const ws = this.normalizeWeekStartDate(weekStart);
-        await this.prisma.weeklyWorkPlan.deleteMany({
-            where: { userId, weekStart: ws },
-        });
-        return true;
-    }
-
-    async teamWeeklySchedule(requesterRole: UserRole, weekStart: Date) {
+    async teamWorkSchedules(requesterRole: UserRole) {
         this.assertCanViewTeam(requesterRole);
-        const ws = this.normalizeWeekStartDate(weekStart);
 
         const users = await this.prisma.user.findMany({
             where: { status: 'ACTIVE' },
@@ -267,78 +195,34 @@ export class WorkScheduleService {
             orderBy: { name: 'asc' },
         });
 
-        const plans = await this.prisma.weeklyWorkPlan.findMany({
-            where: { weekStart: ws },
-            include: {
-                slots: {
-                    orderBy: [{ dayOfWeek: 'asc' }, { startMinutes: 'asc' }],
+        const ids = users.map((u) => u.id);
+        if (ids.length === 0) return [];
+
+        const withData = await this.prisma.user.findMany({
+            where: { id: { in: ids } },
+            select: {
+                id: true,
+                weekendDays: true,
+                updatedAt: true,
+                workIntervals: {
+                    orderBy: [{ startMinutes: 'asc' }],
                 },
             },
         });
 
-        const planByUser = new Map(plans.map((p) => [p.userId, p]));
+        const byId = new Map(withData.map((u) => [u.id, u]));
 
-        return users.map((u) => ({
-            user: { id: u.id, name: u.name, email: u.email },
-            plan: planByUser.get(u.id) ?? null,
-        }));
-    }
-
-    async teamWeeklyScheduleForDate(
-        requesterRole: UserRole,
-        referenceDate: Date,
-    ) {
-        this.assertCanViewTeam(requesterRole);
-        const ref = this.normalizeWeekStartDate(referenceDate);
-        const earliest = this.addDaysUTCDateOnly(ref, -6);
-
-        const users = await this.prisma.user.findMany({
-            where: { status: 'ACTIVE' },
-            select: { id: true, name: true, email: true },
-            orderBy: { name: 'asc' },
-        });
-
-        const userIds = users.map((u) => u.id);
-        if (userIds.length === 0) return [];
-
-        const plans = await this.prisma.weeklyWorkPlan.findMany({
-            where: {
-                userId: { in: userIds },
-                weekStart: { gte: earliest, lte: ref },
-            },
-            orderBy: { weekStart: 'desc' },
-            include: {
-                slots: {
-                    orderBy: [{ dayOfWeek: 'asc' }, { startMinutes: 'asc' }],
+        return users.map((u) => {
+            const row = byId.get(u.id)!;
+            return {
+                user: { id: u.id, name: u.name, email: u.email },
+                schedule: {
+                    userId: row.id,
+                    weekendDays: row.weekendDays,
+                    intervals: row.workIntervals,
+                    updatedAt: row.updatedAt,
                 },
-            },
+            };
         });
-
-        const plansByUser = new Map<string, typeof plans>();
-        for (const p of plans) {
-            const list = plansByUser.get(p.userId) ?? [];
-            list.push(p);
-            plansByUser.set(p.userId, list);
-        }
-
-        const planForRef = (userId: string) => {
-            const candidates = plansByUser.get(userId) ?? [];
-            if (candidates.length === 0) return null;
-            return (
-                candidates.find((candidate) => {
-                    const start = candidate.weekStart;
-                    const endExclusive = this.addDaysUTCDateOnly(start, 7);
-                    return (
-                        start.getTime() <= ref.getTime() &&
-                        ref.getTime() < endExclusive.getTime()
-                    );
-                }) ?? null
-            );
-        };
-
-        return users.map((u) => ({
-            user: { id: u.id, name: u.name, email: u.email },
-            plan: planForRef(u.id),
-        }));
     }
 }

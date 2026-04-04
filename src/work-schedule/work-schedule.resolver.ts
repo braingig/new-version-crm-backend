@@ -4,9 +4,9 @@ import { WorkScheduleService } from './work-schedule.service';
 import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import {
-    WeeklyWorkPlanType,
-    SetWeeklyWorkPlanInput,
-    EmployeeWeeklyScheduleRow,
+    WorkScheduleType,
+    SetWorkScheduleInput,
+    TeamWorkScheduleRow,
 } from './dto/work-schedule.dto';
 import { UserRole } from '@prisma/client';
 
@@ -14,72 +14,55 @@ import { UserRole } from '@prisma/client';
 export class WorkScheduleResolver {
     constructor(private readonly workScheduleService: WorkScheduleService) {}
 
-    @Query(() => WeeklyWorkPlanType, { nullable: true })
+    @Query(() => WorkScheduleType)
     @UseGuards(GqlAuthGuard)
-    async myWeeklyWorkPlan(
-        @CurrentUser() user: { userId: string },
-        @Args('weekStart') weekStart: Date,
+    async workSchedule(
+        @CurrentUser() user: { userId: string; role: UserRole },
+        @Args('userId', { type: () => String, nullable: true }) userId?: string,
     ) {
-        return this.workScheduleService.myWeeklyWorkPlan(user.userId, weekStart);
+        const target = userId ?? user.userId;
+        if (target !== user.userId) {
+            this.workScheduleService.assertCanViewTeam(user.role);
+        }
+        return this.workScheduleService.getWorkSchedule(target);
     }
 
-    @Query(() => WeeklyWorkPlanType, { nullable: true })
+    @Query(() => [TeamWorkScheduleRow])
     @UseGuards(GqlAuthGuard)
-    async myWeeklyWorkPlanForDate(
-        @CurrentUser() user: { userId: string },
-        @Args('referenceDate') referenceDate: Date,
+    async teamWorkSchedules(
+        @CurrentUser() user: { userId: string; role: UserRole },
     ) {
-        return this.workScheduleService.myWeeklyWorkPlanForDate(
+        return this.workScheduleService.teamWorkSchedules(user.role);
+    }
+
+    @Mutation(() => WorkScheduleType)
+    @UseGuards(GqlAuthGuard)
+    async setMyWorkSchedule(
+        @CurrentUser() user: { userId: string; role: UserRole },
+        @Args('input') input: SetWorkScheduleInput,
+    ) {
+        return this.workScheduleService.setWorkSchedule(
             user.userId,
-            referenceDate,
-        );
-    }
-
-    @Query(() => [EmployeeWeeklyScheduleRow])
-    @UseGuards(GqlAuthGuard)
-    async teamWeeklySchedule(
-        @CurrentUser() user: { userId: string; role: UserRole },
-        @Args('weekStart') weekStart: Date,
-    ) {
-        return this.workScheduleService.teamWeeklySchedule(user.role, weekStart);
-    }
-
-    @Query(() => [EmployeeWeeklyScheduleRow])
-    @UseGuards(GqlAuthGuard)
-    async teamWeeklyScheduleForDate(
-        @CurrentUser() user: { userId: string; role: UserRole },
-        @Args('referenceDate') referenceDate: Date,
-    ) {
-        return this.workScheduleService.teamWeeklyScheduleForDate(
+            user.userId,
             user.role,
-            referenceDate,
-        );
-    }
-
-    @Mutation(() => WeeklyWorkPlanType)
-    @UseGuards(GqlAuthGuard)
-    async setWeeklyWorkPlan(
-        @CurrentUser() user: { userId: string },
-        @Args('input') input: SetWeeklyWorkPlanInput,
-    ) {
-        const result = await this.workScheduleService.setWeeklyWorkPlan(
-            user.userId,
-            input.weekStart,
             input.weekendDays,
-            input.slots,
+            input.intervals,
         );
-        return result!;
     }
 
-    @Mutation(() => Boolean)
+    @Mutation(() => WorkScheduleType)
     @UseGuards(GqlAuthGuard)
-    async deleteWeeklyWorkPlan(
-        @CurrentUser() user: { userId: string },
-        @Args('weekStart') weekStart: Date,
+    async setUserWorkSchedule(
+        @CurrentUser() user: { userId: string; role: UserRole },
+        @Args('userId') userId: string,
+        @Args('input') input: SetWorkScheduleInput,
     ) {
-        return this.workScheduleService.deleteWeeklyWorkPlan(
+        return this.workScheduleService.setWorkSchedule(
+            userId,
             user.userId,
-            weekStart,
+            user.role,
+            input.weekendDays,
+            input.intervals,
         );
     }
 }
