@@ -18,6 +18,7 @@ import { ActivityLogsModule } from './activity-logs/activity-logs.module';
 import { ActivityModule } from './activity/activity.module';
 import { TaskListsModule } from './task-lists/task-lists.module';
 import { WorkScheduleModule } from './work-schedule/work-schedule.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
     imports: [
@@ -52,6 +53,7 @@ import { WorkScheduleModule } from './work-schedule/work-schedule.module';
         ActivityLogsModule,
         ActivityModule,
         WorkScheduleModule,
+        MailModule,
     ],
 })
 export class AppModule { }
