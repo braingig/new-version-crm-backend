@@ -3,6 +3,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TaskStatus, TaskPriority, UserRole } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '@prisma/client';
+import {
+    extractMentionHandlesWithCatalog,
+    joinTextsForMentions,
+} from '../common/mentions/mention.util';
 
 @Injectable()
 export class TasksService {
@@ -94,11 +98,23 @@ export class TasksService {
                 },
             });
             this.notifyTaskAssigned(result!, userId);
+            await this.notifyUsersMentionedInTexts(
+                [result!.description ?? '', result!.note ?? ''],
+                { id: result!.id, title: result!.title },
+                userId,
+                'task_field',
+            );
             return result!;
         }
         if (assignedToId && assignedToId !== userId) {
             this.notifyTaskAssigned(task, userId);
         }
+        await this.notifyUsersMentionedInTexts(
+            [task.description ?? '', task.note ?? ''],
+            { id: task.id, title: task.title },
+            userId,
+            'task_field',
+        );
         return task;
     }
 
@@ -346,6 +362,21 @@ export class TasksService {
             if (changedFields.includes('Status')) {
                 this.notifyTaskStatusChangeToAdminAndAssigner(updated, updatedByUserId);
             }
+            const mentionTexts: string[] = [];
+            if (changedFields.includes('Description')) {
+                mentionTexts.push(updated.description ?? '');
+            }
+            if (changedFields.includes('Note')) {
+                mentionTexts.push(updated.note ?? '');
+            }
+            if (mentionTexts.length > 0) {
+                await this.notifyUsersMentionedInTexts(
+                    mentionTexts,
+                    { id: updated.id, title: updated.title },
+                    updatedByUserId,
+                    'task_field',
+                );
+            }
         }
         return updated;
     }
@@ -442,7 +473,7 @@ export class TasksService {
     }
 
     async addComment(taskId: string, userId: string, content: string) {
-        return this.prisma.comment.create({
+        const comment = await this.prisma.comment.create({
             data: {
                 taskId,
                 userId,
@@ -458,6 +489,113 @@ export class TasksService {
                 },
             },
         });
+        const task = await this.prisma.task.findUnique({
+            where: { id: taskId },
+            select: { id: true, title: true },
+        });
+        if (task) {
+            await this.notifyUsersMentionedInTexts(
+                [content],
+                task,
+                userId,
+                'comment',
+            );
+        }
+        return comment;
+    }
+
+    /**
+     * Resolve @handles to user ids: full email (case-insensitive) or exact full name (unique).
+     */
+    private async resolveMentionHandlesToUserIds(
+        handles: string[],
+        allUsers?: { id: string; name: string; email: string }[],
+    ): Promise<string[]> {
+        const unique = [...new Set(handles.map((h) => h.trim()).filter(Boolean))];
+        if (unique.length === 0) return [];
+
+        const users =
+            allUsers ??
+            (await this.prisma.user.findMany({
+                where: { status: 'ACTIVE' },
+                select: { id: true, name: true, email: true },
+            }));
+        const byEmail = new Map(users.map((u) => [u.email.toLowerCase(), u.id]));
+        const byNameLower = new Map<string, string[]>();
+        for (const u of users) {
+            const key = u.name.toLowerCase().trim();
+            if (!byNameLower.has(key)) byNameLower.set(key, []);
+            byNameLower.get(key)!.push(u.id);
+        }
+
+        const ids = new Set<string>();
+        for (const h of unique) {
+            const hl = h.toLowerCase();
+            if (h.includes('@') && h.includes('.')) {
+                const id = byEmail.get(hl);
+                if (id) ids.add(id);
+                continue;
+            }
+            const nameMatches = byNameLower.get(hl) ?? [];
+            if (nameMatches.length === 1) {
+                ids.add(nameMatches[0]);
+            } else if (nameMatches.length > 1) {
+                console.warn(
+                    `Mention "${h}" matches multiple users with the same name; skipped.`,
+                );
+            }
+        }
+        return [...ids];
+    }
+
+    private async notifyUsersMentionedInTexts(
+        texts: string[],
+        task: { id: string; title: string },
+        authorUserId: string,
+        kind: 'comment' | 'task_field',
+    ): Promise<void> {
+        const combined = joinTextsForMentions(texts);
+        if (!combined.includes('@')) return;
+
+        const allUsers = await this.prisma.user.findMany({
+            where: { status: 'ACTIVE' },
+            select: { id: true, name: true, email: true },
+        });
+        const names = allUsers.map((u) => u.name);
+        const handles = extractMentionHandlesWithCatalog(combined, names);
+        if (handles.length === 0) return;
+
+        const targetIds = await this.resolveMentionHandlesToUserIds(handles, allUsers);
+        if (targetIds.length === 0) return;
+
+        const author = await this.prisma.user.findUnique({
+            where: { id: authorUserId },
+            select: { name: true },
+        });
+        const authorName = author?.name ?? 'Someone';
+        const link = `/dashboard/tasks/${task.id}`;
+        const title =
+            kind === 'comment'
+                ? 'You were mentioned in a comment'
+                : 'You were mentioned on a task';
+        const action =
+            kind === 'comment'
+                ? 'mentioned you in a comment on'
+                : 'mentioned you on';
+
+        for (const uid of targetIds) {
+            if (uid === authorUserId) continue;
+            try {
+                await this.notificationsService.create(uid, {
+                    title,
+                    message: `${authorName} ${action} "${task.title}".`,
+                    type: NotificationType.INFO,
+                    link,
+                });
+            } catch (err) {
+                console.error('Failed to notify mentioned user', uid, err);
+            }
+        }
     }
 
     /**
