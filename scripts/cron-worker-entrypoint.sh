@@ -10,8 +10,18 @@ if [ -f "/usr/share/zoneinfo/${TZ}" ]; then
   echo "${TZ}" > /etc/timezone
 fi
 
-# Expose container env vars to cron commands.
-printenv | sed 's/^\(.*\)$/export \1/g' > /etc/profile.d/cron_env.sh
+# Expose container env vars to cron commands (safely escaped).
+# This avoids syntax errors when values contain spaces, #, <, >, quotes, etc.
+{
+  echo "#!/usr/bin/env bash"
+  while IFS='=' read -r name value; do
+    # Skip invalid env names just in case.
+    if [[ ! "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      continue
+    fi
+    printf 'export %s=%q\n' "$name" "$value"
+  done < <(printenv)
+} > /etc/profile.d/cron_env.sh
 chmod +x /etc/profile.d/cron_env.sh
 
 cat > /etc/cron.d/task-deadline-reminders <<EOF
