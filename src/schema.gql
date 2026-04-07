@@ -238,7 +238,7 @@ type Query {
   project(id: String!): ProjectType!
   projects(filters: ProjectFiltersInput): [ProjectType!]!
   sales(assignedToId: String): [Sale!]!
-  task(id: String!): TaskType!
+  task(id: String!): TaskType
   taskLists(projectId: String!): [TaskListType!]!
   tasks(filters: TaskFiltersInput): [TaskType!]!
   tasksForSelection(filters: TaskFiltersInput): [TaskType!]!

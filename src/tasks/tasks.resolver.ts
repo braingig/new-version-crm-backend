@@ -27,7 +27,7 @@ export class TasksResolver {
         return this.tasksService.findAllForSelection(filters);
     }
 
-    @Query(() => TaskType)
+    @Query(() => TaskType, { nullable: true })
     @UseGuards(GqlAuthGuard)
     async task(@Args('id') id: string) {
         return this.tasksService.findOne(id);
