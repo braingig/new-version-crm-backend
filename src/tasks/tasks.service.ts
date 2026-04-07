@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { TaskStatus, TaskPriority, UserRole } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -7,13 +8,47 @@ import {
     extractMentionHandlesWithCatalog,
     joinTextsForMentions,
 } from '../common/mentions/mention.util';
+import { MailService } from '../mail/mail.service';
+import {
+    htmlMentionEmail,
+    htmlTaskAssignedEmail,
+    subjectMention,
+    subjectTaskAssigned,
+} from '../mail/task-email.templates';
 
 @Injectable()
 export class TasksService {
     constructor(
         private prisma: PrismaService,
         private notificationsService: NotificationsService,
+        private mail: MailService,
+        private config: ConfigService,
     ) {}
+
+    private appName(): string {
+        return (this.config.get<string>('APP_NAME') ?? '').trim() || 'CRM';
+    }
+
+    private taskEmailContext(task: {
+        id: string;
+        title: string;
+        status: TaskStatus;
+        priority: TaskPriority;
+        startDate: Date | null;
+        dueDate: Date | null;
+        project?: { name: string } | null;
+    }) {
+        return {
+            taskTitle: task.title,
+            projectName: task.project?.name ?? 'Project',
+            status: task.status,
+            priority: task.priority,
+            dueDate: task.dueDate,
+            startDate: task.startDate,
+            taskUrl: `${this.mail.getPublicAppBaseUrl()}/dashboard/tasks/${task.id}`,
+            appName: this.appName(),
+        };
+    }
 
     async create(
         userId: string,
@@ -97,7 +132,7 @@ export class TasksService {
                     },
                 },
             });
-            this.notifyTaskAssigned(result!, userId);
+            await this.notifyTaskAssigned(result!, userId);
             await this.notifyUsersMentionedInTexts(
                 [result!.description ?? '', result!.note ?? ''],
                 { id: result!.id, title: result!.title },
@@ -107,7 +142,7 @@ export class TasksService {
             return result!;
         }
         if (assignedToId && assignedToId !== userId) {
-            this.notifyTaskAssigned(task, userId);
+            await this.notifyTaskAssigned(task, userId);
         }
         await this.notifyUsersMentionedInTexts(
             [task.description ?? '', task.note ?? ''],
@@ -353,7 +388,11 @@ export class TasksService {
             const newAssigneeIds = new Set(assigneeIds);
             const newlyAssigned = [...newAssigneeIds].filter((uid) => !previousAssigneeIds.has(uid) && uid !== updatedByUserId);
             if (newlyAssigned.length > 0) {
-                this.notifyTaskAssignedToUsers(updated, newlyAssigned);
+                await this.notifyTaskAssignedToUsers(
+                    updated,
+                    newlyAssigned,
+                    updatedByUserId,
+                );
             }
         }
         if (updatedByUserId && existing) {
@@ -583,6 +622,18 @@ export class TasksService {
                 ? 'mentioned you in a comment on'
                 : 'mentioned you on';
 
+        const fullTask = await this.prisma.task.findUnique({
+            where: { id: task.id },
+            include: { project: true },
+        });
+
+        const contextLabel =
+            kind === 'comment'
+                ? 'in a comment on this task'
+                : 'in the task description or notes';
+        const excerpt =
+            kind === 'comment' ? (texts[0] ?? '') : combined;
+
         for (const uid of targetIds) {
             if (uid === authorUserId) continue;
             try {
@@ -595,34 +646,86 @@ export class TasksService {
             } catch (err) {
                 console.error('Failed to notify mentioned user', uid, err);
             }
+
+            if (fullTask) {
+                const mentionedUser = allUsers.find((u) => u.id === uid);
+                if (mentionedUser?.email) {
+                    const ctx = {
+                        ...this.taskEmailContext(fullTask),
+                        authorName,
+                        contextLabel,
+                        excerpt,
+                    };
+                    const html = htmlMentionEmail(mentionedUser.name, ctx);
+                    await this.mail.sendMailIfConfigured(
+                        mentionedUser.email,
+                        subjectMention(fullTask.title),
+                        html,
+                    );
+                }
+            }
         }
     }
 
     /**
      * Notify users who were assigned to the task (excluding the person who did the assign).
      */
-    private notifyTaskAssigned(
-        task: { id: string; title: string; project?: { name: string } | null; assignedToId?: string | null; taskAssignees?: { user: { id: string } }[] },
+    private async notifyTaskAssigned(
+        task: {
+            id: string;
+            title: string;
+            status: TaskStatus;
+            priority: TaskPriority;
+            startDate: Date | null;
+            dueDate: Date | null;
+            project?: { name: string } | null;
+            assignedToId?: string | null;
+            taskAssignees?: { user: { id: string } }[];
+        },
         assignedByUserId: string,
-    ) {
+    ): Promise<void> {
         const assigneeIds = new Set<string>();
         if (task.assignedToId) assigneeIds.add(task.assignedToId);
         task.taskAssignees?.forEach((ta) => assigneeIds.add(ta.user.id));
         assigneeIds.delete(assignedByUserId);
-        this.notifyTaskAssignedToUsers(task, [...assigneeIds]);
+        await this.notifyTaskAssignedToUsers(task, [...assigneeIds], assignedByUserId);
     }
 
     /**
      * Send "Task assigned" notification to the given user ids.
      */
     private async notifyTaskAssignedToUsers(
-        task: { id: string; title: string; project?: { name: string } | null },
+        task: {
+            id: string;
+            title: string;
+            status: TaskStatus;
+            priority: TaskPriority;
+            startDate: Date | null;
+            dueDate: Date | null;
+            project?: { name: string } | null;
+        },
         userIds: string[],
+        assignedByUserId?: string | null,
     ) {
         if (userIds.length === 0) return;
         const projectName = task.project?.name ?? 'Project';
         const message = `You were assigned to "${task.title}" in ${projectName}.`;
         const link = `/dashboard/tasks/${task.id}`;
+
+        let assignedByName: string | null = null;
+        if (assignedByUserId) {
+            const assigner = await this.prisma.user.findUnique({
+                where: { id: assignedByUserId },
+                select: { name: true },
+            });
+            assignedByName = assigner?.name ?? null;
+        }
+
+        const users = await this.prisma.user.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, name: true, email: true },
+        });
+
         for (const userId of userIds) {
             try {
                 await this.notificationsService.create(userId, {
@@ -633,6 +736,28 @@ export class TasksService {
                 });
             } catch (err) {
                 console.error('Failed to send task assignment notification to', userId, err);
+            }
+        }
+
+        const ctx = this.taskEmailContext(task);
+        for (const u of users) {
+            if (!u.email) {
+                console.warn(
+                    `[TasksService] Skipping assignment email for user ${u.id}: no email on record.`,
+                );
+                continue;
+            }
+            const html = htmlTaskAssignedEmail(u.name, ctx, assignedByName);
+            const mailResult = await this.mail.sendMailIfConfigured(
+                u.email,
+                subjectTaskAssigned(task.title),
+                html,
+            );
+            if (!mailResult.sent) {
+                console.warn(
+                    `[TasksService] Assignment email not sent to ${u.email}:`,
+                    mailResult.reason ?? 'unknown',
+                );
             }
         }
     }

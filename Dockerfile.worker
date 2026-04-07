@@ -1,0 +1,38 @@
+FROM node:20-bookworm AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+COPY prisma ./prisma/
+RUN npm install
+
+COPY . .
+
+RUN npx prisma generate
+RUN npm run build
+
+FROM node:20-bookworm
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends cron tzdata \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY package*.json ./
+COPY prisma ./prisma/
+RUN npm install --omit=dev
+
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY scripts/cron-worker-entrypoint.sh /usr/local/bin/cron-worker-entrypoint.sh
+
+RUN chmod +x /usr/local/bin/cron-worker-entrypoint.sh
+
+ENV TZ=Asia/Dhaka
+ENV CRON_SCHEDULE="0 0 * * *"
+ENV CRON_COMMAND="cd /app && node dist/src/jobs/task-deadline-reminders.runner"
+
+CMD ["/usr/local/bin/cron-worker-entrypoint.sh"]
+

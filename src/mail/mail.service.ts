@@ -13,25 +13,81 @@ export class MailService {
     private readonly transporter: Transporter | null;
     private readonly fromAddress: string;
     private static readonly missingCredsMessage =
-        'SMTP_USER and SMTP_PASS are missing or empty. Add them to the backend .env (Mailtrap inbox credentials) and restart the server.';
+        'SMTP_HOST, SMTP_USER and SMTP_PASS must be set in the backend .env (non-empty) to send email.';
 
     constructor(private readonly config: ConfigService) {
-        const port = Number(this.config.get('SMTP_PORT')) || 2525;
+        const port = Number(this.config.get('SMTP_PORT')) || 465;
+        const host = (this.config.get<string>('SMTP_HOST') ?? '').trim();
         const user = (this.config.get<string>('SMTP_USER') ?? '').trim();
         const pass = (this.config.get<string>('SMTP_PASS') ?? '').trim();
 
         this.fromAddress =
             this.config.get<string>('MAIL_FROM') || '"CRM" <noreply@example.com>';
 
-        // Empty auth triggers nodemailer: "Missing credentials for PLAIN"
-        if (!user || !pass) {
+        if (!host || !user || !pass) {
             this.transporter = null;
         } else {
+            const secureOverride = (
+                this.config.get<string>('SMTP_SECURE') ?? ''
+            )
+                .trim()
+                .toLowerCase();
+            // Port 465 uses implicit TLS; 587 uses STARTTLS (secure: false). Hostinger docs use both.
+            const secure =
+                secureOverride === 'true' || secureOverride === '1'
+                    ? true
+                    : secureOverride === 'false' || secureOverride === '0'
+                      ? false
+                      : port === 465;
+
             this.transporter = nodemailer.createTransport({
-                host: this.config.get<string>('SMTP_HOST', 'sandbox.smtp.mailtrap.io'),
+                host,
                 port,
+                secure,
                 auth: { user, pass },
+                ...(port === 587 ? { requireTLS: true } : {}),
             });
+        }
+    }
+
+    /**
+     * Base URL for links in emails (task detail, etc.). Set PUBLIC_APP_URL or reuse CORS_ORIGIN.
+     */
+    getPublicAppBaseUrl(): string {
+        const raw =
+            (this.config.get<string>('PUBLIC_APP_URL') ?? '').trim() ||
+            (this.config.get<string>('CORS_ORIGIN') ?? '').trim() ||
+            'http://localhost:3000';
+        return raw.replace(/\/$/, '');
+    }
+
+    /**
+     * Send HTML email when SMTP is configured; otherwise no-op. Does not throw on failure.
+     */
+    async sendMailIfConfigured(
+        to: string,
+        subject: string,
+        html: string,
+    ): Promise<{ sent: boolean; reason?: string }> {
+        if (!this.transporter) {
+            return { sent: false, reason: 'smtp_not_configured' };
+        }
+        const addr = (to ?? '').trim();
+        if (!addr) {
+            return { sent: false, reason: 'empty_recipient' };
+        }
+        try {
+            await this.transporter.sendMail({
+                from: this.fromAddress,
+                to: addr,
+                subject,
+                html,
+            });
+            return { sent: true };
+        } catch (e) {
+            const message = e instanceof Error ? e.message : String(e);
+            console.error('[MailService] sendMailIfConfigured failed:', message);
+            return { sent: false, reason: message };
         }
     }
 
@@ -53,55 +109,5 @@ export class MailService {
             subject,
             ...(options?.html ? { html: body } : { text: body }),
         });
-    }
-
-    /** Check SMTP connectivity and credentials (does not send a message). */
-    async verifyConnection(): Promise<{ ok: true } | { ok: false; message: string }> {
-        if (!this.transporter) {
-            return { ok: false, message: MailService.missingCredsMessage };
-        }
-        try {
-            await this.transporter.verify();
-            return { ok: true };
-        } catch (e) {
-            const message = e instanceof Error ? e.message : String(e);
-            return { ok: false, message };
-        }
-    }
-
-    /**
-     * Verifies SMTP, then sends one test message (shows up in Mailtrap / your inbox).
-     */
-    async verifyAndSendTestEmail(
-        to: string,
-    ): Promise<
-        | { ok: true; sentTo: string; messageId?: string }
-        | { ok: false; message: string }
-    > {
-        if (!this.transporter) {
-            return { ok: false, message: MailService.missingCredsMessage };
-        }
-        try {
-            await this.transporter.verify();
-        } catch (e) {
-            const message = e instanceof Error ? e.message : String(e);
-            return { ok: false, message };
-        }
-        try {
-            const info = await this.transporter.sendMail({
-                from: this.fromAddress,
-                to,
-                subject: 'CRM — SMTP test',
-                text: [
-                    'This is a test email from the CRM backend.',
-                    `Time: ${new Date().toISOString()}`,
-                    `To: ${to}`,
-                ].join('\n'),
-            });
-            return { ok: true, sentTo: to, messageId: info.messageId };
-        } catch (e) {
-            const message = e instanceof Error ? e.message : String(e);
-            return { ok: false, message };
-        }
     }
 }
