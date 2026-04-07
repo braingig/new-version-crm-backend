@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { TaskStatus, TaskPriority, UserRole } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -22,11 +21,10 @@ export class TasksService {
         private prisma: PrismaService,
         private notificationsService: NotificationsService,
         private mail: MailService,
-        private config: ConfigService,
     ) {}
 
     private appName(): string {
-        return (this.config.get<string>('APP_NAME') ?? '').trim() || 'CRM';
+        return this.mail.getAppDisplayName();
     }
 
     private taskEmailContext(task: {

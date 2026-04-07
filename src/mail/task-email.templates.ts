@@ -67,7 +67,7 @@ ${inner}
 </tr>
 <tr>
 <td style="padding:0 28px 28px;color:#6b7280;font-size:12px;border-top:1px solid #e5e7eb;">
-<p style="margin:16px 0 0;">This is an automated message. Please do not reply directly to this email.</p>
+<p style="margin:16px 0 0;">Thank you, BRAINGIG Team</p>
 </td>
 </tr>
 </table>

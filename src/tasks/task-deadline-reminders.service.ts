@@ -21,7 +21,7 @@ export class TaskDeadlineRemindersService {
     ) {}
 
     private appName(): string {
-        return (this.config.get<string>('APP_NAME') ?? '').trim() || 'CRM';
+        return this.mail.getAppDisplayName();
     }
 
     private reminderTimeZone(): string {

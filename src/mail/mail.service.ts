@@ -58,7 +58,25 @@ export class MailService {
             (this.config.get<string>('PUBLIC_APP_URL') ?? '').trim() ||
             (this.config.get<string>('CORS_ORIGIN') ?? '').trim() ||
             'http://localhost:3000';
-        return raw.replace(/\/$/, '');
+        const firstOrigin = raw
+            .split(',')
+            .map((v) => v.trim())
+            .filter(Boolean)[0] ?? 'http://localhost:3000';
+        return firstOrigin.replace(/^"+|"+$/g, '').replace(/\/$/, '');
+    }
+
+    /**
+     * Display name for email header branding.
+     * Prefers APP_NAME; falls back to the name part from MAIL_FROM.
+     */
+    getAppDisplayName(): string {
+        const app = (this.config.get<string>('APP_NAME') ?? '').trim();
+        if (app) return app;
+
+        const from = (this.config.get<string>('MAIL_FROM') ?? '').trim();
+        const match = from.match(/^\s*"?([^"<]+?)"?\s*</);
+        if (match?.[1]?.trim()) return match[1].trim();
+        return 'CRM';
     }
 
     /**
