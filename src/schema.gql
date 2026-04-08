@@ -15,9 +15,9 @@ input AdminCreateManualTimeEntryInput {
   description: String
   durationSeconds: Float
   employeeId: String!
-  endTime: DateTime!
+  endTime: String!
   isManual: Boolean
-  startTime: DateTime!
+  startTime: String!
   taskId: String
 }
 
@@ -25,9 +25,9 @@ input AdminUpdateTimeEntryInput {
   description: String
   durationSeconds: Float
   employeeId: String
-  endTime: DateTime
+  endTime: String
   isManual: Boolean
-  startTime: DateTime
+  startTime: String
   taskId: String
 }
 

@@ -255,8 +255,8 @@ export class TimesheetsService {
         input: {
             employeeId: string;
             taskId?: string;
-            startTime: Date;
-            endTime: Date;
+            startTime: string;
+            endTime: string;
             durationSeconds?: number;
             description?: string;
             isManual?: boolean;
@@ -301,8 +301,8 @@ export class TimesheetsService {
         input: {
             employeeId?: string;
             taskId?: string;
-            startTime?: Date;
-            endTime?: Date;
+            startTime?: string;
+            endTime?: string;
             durationSeconds?: number;
             description?: string;
             isManual?: boolean;

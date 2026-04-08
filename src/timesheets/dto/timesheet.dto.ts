@@ -80,10 +80,12 @@ export class AdminCreateManualTimeEntryInput {
     taskId?: string;
 
     @Field()
-    startTime: Date;
+    @IsString()
+    startTime: string;
 
     @Field()
-    endTime: Date;
+    @IsString()
+    endTime: string;
 
     @Field({ nullable: true })
     @IsOptional()
@@ -113,11 +115,13 @@ export class AdminUpdateTimeEntryInput {
 
     @Field({ nullable: true })
     @IsOptional()
-    startTime?: Date;
+    @IsString()
+    startTime?: string;
 
     @Field({ nullable: true })
     @IsOptional()
-    endTime?: Date;
+    @IsString()
+    endTime?: string;
 
     @Field({ nullable: true })
     @IsOptional()
