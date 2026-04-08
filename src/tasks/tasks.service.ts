@@ -139,7 +139,7 @@ export class TasksService {
             );
             return result!;
         }
-        if (assignedToId && assignedToId !== userId) {
+        if (assignedToId) {
             await this.notifyTaskAssigned(task, userId);
         }
         await this.notifyUsersMentionedInTexts(
@@ -384,7 +384,7 @@ export class TasksService {
         });
         if (assigneeIds !== undefined && updatedByUserId) {
             const newAssigneeIds = new Set(assigneeIds);
-            const newlyAssigned = [...newAssigneeIds].filter((uid) => !previousAssigneeIds.has(uid) && uid !== updatedByUserId);
+            const newlyAssigned = [...newAssigneeIds].filter((uid) => !previousAssigneeIds.has(uid));
             if (newlyAssigned.length > 0) {
                 await this.notifyTaskAssignedToUsers(
                     updated,
@@ -685,7 +685,6 @@ export class TasksService {
         const assigneeIds = new Set<string>();
         if (task.assignedToId) assigneeIds.add(task.assignedToId);
         task.taskAssignees?.forEach((ta) => assigneeIds.add(ta.user.id));
-        assigneeIds.delete(assignedByUserId);
         await this.notifyTaskAssignedToUsers(task, [...assigneeIds], assignedByUserId);
     }
 
@@ -725,6 +724,10 @@ export class TasksService {
         });
 
         for (const userId of userIds) {
+            if (assignedByUserId && userId === assignedByUserId) {
+                // Self-assignment should still send email, but skip in-app notification noise.
+                continue;
+            }
             try {
                 await this.notificationsService.create(userId, {
                     title: 'Task assigned',

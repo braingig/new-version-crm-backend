@@ -106,10 +106,15 @@ export function htmlTaskAssignedEmail(
     ctx: TaskEmailContext,
     assignedByName: string | null,
 ): string {
-    const who = assignedByName ? escapeHtml(assignedByName) : 'A team member';
+    const isSelfAssignment =
+        Boolean(assignedByName) &&
+        assignedByName!.trim().toLowerCase() === recipientName.trim().toLowerCase();
+    const assignmentLine = isSelfAssignment
+        ? 'You assigned this task to yourself.'
+        : `${assignedByName ? escapeHtml(assignedByName) : 'A team member'} has assigned you to a task.`;
     const inner = `
 <p style="margin:0 0 8px;font-size:18px;font-weight:600;color:#111827;">Hello ${escapeHtml(recipientName)},</p>
-<p style="margin:0 0 16px;color:#374151;">${who} has assigned you to a task.</p>
+<p style="margin:0 0 16px;color:#374151;">${assignmentLine}</p>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:6px;margin-top:8px;">
 ${detailRow('Task', `<strong>${escapeHtml(ctx.taskTitle)}</strong>`)}
 ${detailRow('Project', escapeHtml(ctx.projectName))}
