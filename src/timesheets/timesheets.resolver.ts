@@ -4,7 +4,17 @@ import { UseGuards, BadRequestException } from '@nestjs/common';
 import { TimesheetsService } from './timesheets.service';
 import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { TimesheetType, TimeEntryType, StartTimeEntryInput, WorkType, EmployeeType, EmployeeDailyActivityType, ActiveTimerRowType } from './dto/timesheet.dto';
+import {
+    TimesheetType,
+    TimeEntryType,
+    StartTimeEntryInput,
+    WorkType,
+    EmployeeType,
+    EmployeeDailyActivityType,
+    ActiveTimerRowType,
+    AdminCreateManualTimeEntryInput,
+    AdminUpdateTimeEntryInput,
+} from './dto/timesheet.dto';
 
 @Resolver()
 export class TimesheetsResolver {
@@ -47,6 +57,34 @@ export class TimesheetsResolver {
             throw new BadRequestException('No active timer found');
         }
         return result;
+    }
+
+    @Mutation(() => TimeEntryType)
+    @UseGuards(GqlAuthGuard)
+    async adminCreateManualTimeEntry(
+        @CurrentUser() user: any,
+        @Args('input') input: AdminCreateManualTimeEntryInput,
+    ) {
+        return this.timesheetsService.adminCreateManualTimeEntry(user.role, input);
+    }
+
+    @Mutation(() => TimeEntryType)
+    @UseGuards(GqlAuthGuard)
+    async adminUpdateTimeEntry(
+        @CurrentUser() user: any,
+        @Args('id') id: string,
+        @Args('input') input: AdminUpdateTimeEntryInput,
+    ) {
+        return this.timesheetsService.adminUpdateTimeEntry(user.role, id, input);
+    }
+
+    @Mutation(() => Boolean)
+    @UseGuards(GqlAuthGuard)
+    async adminDeleteTimeEntry(
+        @CurrentUser() user: any,
+        @Args('id') id: string,
+    ) {
+        return this.timesheetsService.adminDeleteTimeEntry(user.role, id);
     }
 
     @Query(() => [TimesheetType])

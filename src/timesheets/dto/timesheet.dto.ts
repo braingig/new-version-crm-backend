@@ -68,6 +68,71 @@ export class StartTimeEntryInput {
     description?: string;
 }
 
+@InputType()
+export class AdminCreateManualTimeEntryInput {
+    @Field()
+    @IsString()
+    employeeId: string;
+
+    @Field({ nullable: true })
+    @IsOptional()
+    @IsString()
+    taskId?: string;
+
+    @Field()
+    startTime: Date;
+
+    @Field()
+    endTime: Date;
+
+    @Field({ nullable: true })
+    @IsOptional()
+    durationSeconds?: number;
+
+    @Field({ nullable: true })
+    @IsOptional()
+    @IsString()
+    description?: string;
+
+    @Field({ nullable: true })
+    @IsOptional()
+    isManual?: boolean;
+}
+
+@InputType()
+export class AdminUpdateTimeEntryInput {
+    @Field({ nullable: true })
+    @IsOptional()
+    @IsString()
+    employeeId?: string;
+
+    @Field({ nullable: true })
+    @IsOptional()
+    @IsString()
+    taskId?: string;
+
+    @Field({ nullable: true })
+    @IsOptional()
+    startTime?: Date;
+
+    @Field({ nullable: true })
+    @IsOptional()
+    endTime?: Date;
+
+    @Field({ nullable: true })
+    @IsOptional()
+    durationSeconds?: number;
+
+    @Field({ nullable: true })
+    @IsOptional()
+    @IsString()
+    description?: string;
+
+    @Field({ nullable: true })
+    @IsOptional()
+    isManual?: boolean;
+}
+
 @ObjectType()
 export class TimesheetType {
     @Field()

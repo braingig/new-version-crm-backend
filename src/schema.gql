@@ -11,6 +11,26 @@ type ActiveTimerRowType {
   taskTitle: String
 }
 
+input AdminCreateManualTimeEntryInput {
+  description: String
+  durationSeconds: Float
+  employeeId: String!
+  endTime: DateTime!
+  isManual: Boolean
+  startTime: DateTime!
+  taskId: String
+}
+
+input AdminUpdateTimeEntryInput {
+  description: String
+  durationSeconds: Float
+  employeeId: String
+  endTime: DateTime
+  isManual: Boolean
+  startTime: DateTime
+  taskId: String
+}
+
 type AuthResponse {
   accessToken: String!
   refreshToken: String!
@@ -117,6 +137,9 @@ input LoginInput {
 
 type Mutation {
   addComment(content: String!, taskId: String!): CommentType!
+  adminCreateManualTimeEntry(input: AdminCreateManualTimeEntryInput!): TimeEntryType!
+  adminDeleteTimeEntry(id: String!): Boolean!
+  adminUpdateTimeEntry(id: String!, input: AdminUpdateTimeEntryInput!): TimeEntryType!
   changeUserPassword(id: String!, newPassword: String!): Boolean!
   checkIn: TimesheetType!
   checkOut: TimesheetType!

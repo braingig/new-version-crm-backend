@@ -1,10 +1,29 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkType } from './dto/timesheet.dto';
+import { UserRole } from '@prisma/client';
 
 @Injectable()
 export class TimesheetsService {
     constructor(private prisma: PrismaService) { }
+
+    private assertAdmin(role?: string) {
+        if (role !== UserRole.ADMIN) {
+            throw new Error('Only admin can manage employee time entries');
+        }
+    }
+
+    private async recomputeTaskTimeSpent(taskId: string) {
+        const rows = await this.prisma.timeEntry.findMany({
+            where: { taskId, endTime: { not: null } },
+            select: { duration: true },
+        });
+        const totalSeconds = rows.reduce((s, r) => s + (r.duration ?? 0), 0);
+        await this.prisma.task.update({
+            where: { id: taskId },
+            data: { timeSpent: Math.floor(totalSeconds / 60) },
+        });
+    }
 
     async checkIn(employeeId: string) {
         const today = new Date();
@@ -229,6 +248,114 @@ export class TimesheetsService {
         }
 
         return updatedEntry;
+    }
+
+    async adminCreateManualTimeEntry(
+        adminRole: string,
+        input: {
+            employeeId: string;
+            taskId?: string;
+            startTime: Date;
+            endTime: Date;
+            durationSeconds?: number;
+            description?: string;
+            isManual?: boolean;
+        },
+    ) {
+        this.assertAdmin(adminRole);
+        const start = new Date(input.startTime);
+        const end = new Date(input.endTime);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+            throw new Error('Invalid start or end time');
+        }
+        if (end <= start) {
+            throw new Error('End time must be after start time');
+        }
+        const duration =
+            typeof input.durationSeconds === 'number' && input.durationSeconds >= 0
+                ? Math.floor(input.durationSeconds)
+                : Math.floor((end.getTime() - start.getTime()) / 1000);
+
+        const entry = await this.prisma.timeEntry.create({
+            data: {
+                employeeId: input.employeeId,
+                taskId: input.taskId || null,
+                startTime: start,
+                endTime: end,
+                duration,
+                description: input.description,
+                isManual: input.isManual ?? true,
+                status: 'STOPPED',
+            },
+            include: {
+                employee: { select: { id: true, name: true, email: true } },
+            },
+        });
+        if (entry.taskId) await this.recomputeTaskTimeSpent(entry.taskId);
+        return entry;
+    }
+
+    async adminUpdateTimeEntry(
+        adminRole: string,
+        timeEntryId: string,
+        input: {
+            employeeId?: string;
+            taskId?: string;
+            startTime?: Date;
+            endTime?: Date;
+            durationSeconds?: number;
+            description?: string;
+            isManual?: boolean;
+        },
+    ) {
+        this.assertAdmin(adminRole);
+        const existing = await this.prisma.timeEntry.findUnique({ where: { id: timeEntryId } });
+        if (!existing) throw new Error('Time entry not found');
+
+        const nextStart = input.startTime ? new Date(input.startTime) : existing.startTime;
+        const nextEnd = input.endTime ? new Date(input.endTime) : existing.endTime;
+        if (nextEnd && nextEnd <= nextStart) {
+            throw new Error('End time must be after start time');
+        }
+
+        let nextDuration = existing.duration ?? 0;
+        if (typeof input.durationSeconds === 'number' && input.durationSeconds >= 0) {
+            nextDuration = Math.floor(input.durationSeconds);
+        } else if (nextEnd) {
+            nextDuration = Math.floor((nextEnd.getTime() - nextStart.getTime()) / 1000);
+        }
+
+        const updated = await this.prisma.timeEntry.update({
+            where: { id: timeEntryId },
+            data: {
+                employeeId: input.employeeId ?? existing.employeeId,
+                taskId: input.taskId !== undefined ? input.taskId : existing.taskId,
+                startTime: nextStart,
+                endTime: nextEnd,
+                duration: nextDuration,
+                description: input.description !== undefined ? input.description : existing.description,
+                isManual: input.isManual ?? existing.isManual,
+                status: nextEnd ? 'STOPPED' : existing.status,
+            },
+            include: {
+                employee: { select: { id: true, name: true, email: true } },
+            },
+        });
+
+        if (existing.taskId) await this.recomputeTaskTimeSpent(existing.taskId);
+        if (updated.taskId && updated.taskId !== existing.taskId) {
+            await this.recomputeTaskTimeSpent(updated.taskId);
+        }
+        return updated;
+    }
+
+    async adminDeleteTimeEntry(adminRole: string, timeEntryId: string) {
+        this.assertAdmin(adminRole);
+        const existing = await this.prisma.timeEntry.findUnique({ where: { id: timeEntryId } });
+        if (!existing) throw new Error('Time entry not found');
+        await this.prisma.timeEntry.delete({ where: { id: timeEntryId } });
+        if (existing.taskId) await this.recomputeTaskTimeSpent(existing.taskId);
+        return true;
     }
 
     async getTimesheets(employeeId?: string, startDate?: Date, endDate?: Date) {
