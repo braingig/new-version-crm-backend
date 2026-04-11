@@ -49,7 +49,7 @@ export class TasksResolver {
         @Args('id') id: string,
         @Args('input') input: UpdateTaskInput,
     ) {
-        return this.tasksService.update(id, input, user.userId);
+        return this.tasksService.update(id, input, user.userId, user.role);
     }
 
     @Mutation(() => Boolean)

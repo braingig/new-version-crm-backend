@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TaskStatus, TaskPriority, UserRole } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -11,8 +11,10 @@ import { MailService } from '../mail/mail.service';
 import {
     htmlMentionEmail,
     htmlTaskAssignedEmail,
+    htmlTaskReviewRequestedEmail,
     subjectMention,
     subjectTaskAssigned,
+    subjectTaskReviewRequested,
 } from '../mail/task-email.templates';
 
 @Injectable()
@@ -309,8 +311,14 @@ export class TasksService {
             assigneeIds: string[];
         }>,
         updatedByUserId?: string,
+        updatedByRole?: UserRole,
     ) {
         const { assigneeIds, ...rest } = data;
+        if (rest.status === TaskStatus.COMPLETED && updatedByRole !== UserRole.ADMIN) {
+            throw new ForbiddenException(
+                'Only an administrator can mark a task as completed. Move the task to Review when your work is ready.',
+            );
+        }
         const existing = await this.prisma.task.findUnique({
             where: { id },
             select: {
@@ -397,7 +405,13 @@ export class TasksService {
             const changedFields = this.getActuallyChangedFields(existing, updated, previousAssigneeIds);
             this.notifyTaskUpdated(updated, updatedByUserId, changedFields);
             if (changedFields.includes('Status')) {
-                this.notifyTaskStatusChangeToAdminAndAssigner(updated, updatedByUserId);
+                const becameReview =
+                    updated.status === TaskStatus.REVIEW && existing.status !== TaskStatus.REVIEW;
+                if (becameReview) {
+                    await this.notifyAdminsTaskReadyForReview(updated, updatedByUserId);
+                } else {
+                    this.notifyTaskStatusChangeToAdminAndAssigner(updated, updatedByUserId);
+                }
             }
             const mentionTexts: string[] = [];
             if (changedFields.includes('Description')) {
@@ -821,6 +835,74 @@ export class TasksService {
                 });
             } catch (err) {
                 console.error('Failed to send task status change notification to', userId, err);
+            }
+        }
+    }
+
+    /**
+     * When a task moves to Review, notify every admin in-app and by email (excluding the submitter from in-app).
+     */
+    private async notifyAdminsTaskReadyForReview(
+        task: {
+            id: string;
+            title: string;
+            status: TaskStatus;
+            priority: TaskPriority;
+            startDate: Date | null;
+            dueDate: Date | null;
+            project?: { name: string } | null;
+        },
+        submittedByUserId: string,
+    ): Promise<void> {
+        const admins = await this.prisma.user.findMany({
+            where: { role: UserRole.ADMIN },
+            select: { id: true, name: true, email: true },
+        });
+        if (admins.length === 0) return;
+
+        const submitter = await this.prisma.user.findUnique({
+            where: { id: submittedByUserId },
+            select: { name: true },
+        });
+        const submitterName = submitter?.name?.trim() || 'A team member';
+
+        const projectName = task.project?.name ?? 'Project';
+        const link = `/dashboard/tasks/${task.id}`;
+        const message = `Task "${task.title}" in ${projectName} is ready for review (submitted by ${submitterName}).`;
+        const ctx = this.taskEmailContext(task);
+
+        for (const admin of admins) {
+            if (admin.id === submittedByUserId) {
+                continue;
+            }
+            try {
+                await this.notificationsService.create(admin.id, {
+                    title: 'Task ready for review',
+                    message,
+                    type: NotificationType.INFO,
+                    link,
+                });
+            } catch (err) {
+                console.error('Failed to send review notification to admin', admin.id, err);
+            }
+        }
+
+        for (const admin of admins) {
+            if (!admin.email) {
+                console.warn(`[TasksService] Skipping review email for admin ${admin.id}: no email.`);
+                continue;
+            }
+            const html = htmlTaskReviewRequestedEmail(admin.name ?? 'there', ctx, submitterName);
+            const mailResult = await this.mail.sendMailIfConfigured(
+                admin.email,
+                subjectTaskReviewRequested(task.title),
+                html,
+            );
+            if (!mailResult.sent) {
+                console.warn(
+                    `[TasksService] Review-request email not sent to ${admin.email}:`,
+                    mailResult.reason ?? 'unknown',
+                );
             }
         }
     }
