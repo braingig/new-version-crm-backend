@@ -585,13 +585,34 @@ export class TasksService {
         return [...ids];
     }
 
+    /**
+     * Rich-text descriptions store HTML; mention parsing expects plain text with @handles visible.
+     */
+    private stripHtmlForMentions(raw: string): string {
+        if (!raw) return '';
+        if (!raw.includes('<')) return raw;
+        return raw
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<\/p>/gi, '\n')
+            .replace(/<\/div>/gi, '\n')
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
     private async notifyUsersMentionedInTexts(
         texts: string[],
         task: { id: string; title: string },
         authorUserId: string,
         kind: 'comment' | 'task_field',
     ): Promise<void> {
-        const combined = joinTextsForMentions(texts);
+        const plainTexts = texts.map((t) => this.stripHtmlForMentions(t ?? ''));
+        const combined = joinTextsForMentions(plainTexts);
         if (!combined.includes('@')) return;
 
         const allUsers = await this.prisma.user.findMany({
@@ -630,7 +651,7 @@ export class TasksService {
                 ? 'in a comment on this task'
                 : 'in the task description or notes';
         const excerpt =
-            kind === 'comment' ? (texts[0] ?? '') : combined;
+            kind === 'comment' ? this.stripHtmlForMentions(texts[0] ?? '') : combined;
 
         for (const uid of targetIds) {
             if (uid === authorUserId) continue;
