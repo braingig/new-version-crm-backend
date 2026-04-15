@@ -574,6 +574,7 @@ export class TasksService {
                 select: { id: true, name: true, email: true },
             }));
         const byEmail = new Map(users.map((u) => [u.email.toLowerCase(), u.id]));
+        const byId = new Map(users.map((u) => [u.id, u.id]));
         const byNameLower = new Map<string, string[]>();
         for (const u of users) {
             const key = u.name.toLowerCase().trim();
@@ -584,6 +585,11 @@ export class TasksService {
         const ids = new Set<string>();
         for (const h of unique) {
             const hl = h.toLowerCase();
+            const idHit = byId.get(h);
+            if (idHit) {
+                ids.add(idHit);
+                continue;
+            }
             if (h.includes('@') && h.includes('.')) {
                 const id = byEmail.get(hl);
                 if (id) ids.add(id);
@@ -621,22 +627,65 @@ export class TasksService {
             .trim();
     }
 
+    /**
+     * TipTap mentions may be persisted as span nodes with mention metadata.
+     * Extract handles directly from mention attributes so notifications work even
+     * when the visible text does not include "@Name".
+     */
+    private extractMentionHandlesFromRichHtml(raw: string): string[] {
+        if (!raw || !raw.includes('data-type="mention"')) return [];
+
+        const out = new Set<string>();
+        const mentionNodeRe = /<span\b[^>]*data-type=["']mention["'][^>]*>([\s\S]*?)<\/span>/gi;
+        let match: RegExpExecArray | null;
+        while ((match = mentionNodeRe.exec(raw)) !== null) {
+            const fullTag = match[0];
+            const inner = (match[1] ?? '').trim();
+
+            const labelMatch = fullTag.match(/data-label=["']([^"']+)["']/i);
+            const idMatch = fullTag.match(/data-id=["']([^"']+)["']/i);
+            const charMatch = fullTag.match(
+                /data-mention-suggestion-char=["']([^"']+)["']/i,
+            );
+
+            const mentionChar = (charMatch?.[1] ?? '@').trim();
+            const rawHandle = (labelMatch?.[1] ?? idMatch?.[1] ?? inner ?? '').trim();
+            if (!rawHandle) continue;
+
+            let handle = rawHandle;
+            if (mentionChar && handle.startsWith(mentionChar)) {
+                handle = handle.slice(mentionChar.length).trim();
+            }
+            if (handle.startsWith('@')) {
+                handle = handle.slice(1).trim();
+            }
+            if (handle) out.add(handle);
+        }
+
+        return [...out];
+    }
+
     private async notifyUsersMentionedInTexts(
         texts: string[],
         task: { id: string; title: string },
         authorUserId: string,
         kind: 'comment' | 'task_field',
     ): Promise<void> {
+        const htmlHandles = texts.flatMap((t) =>
+            this.extractMentionHandlesFromRichHtml(t ?? ''),
+        );
         const plainTexts = texts.map((t) => this.stripHtmlForMentions(t ?? ''));
         const combined = joinTextsForMentions(plainTexts);
-        if (!combined.includes('@')) return;
 
         const allUsers = await this.prisma.user.findMany({
             where: { status: 'ACTIVE' },
             select: { id: true, name: true, email: true },
         });
         const names = allUsers.map((u) => u.name);
-        const handles = extractMentionHandlesWithCatalog(combined, names);
+        const plainHandles = combined.includes('@')
+            ? extractMentionHandlesWithCatalog(combined, names)
+            : [];
+        const handles = [...new Set([...htmlHandles, ...plainHandles])];
         if (handles.length === 0) return;
 
         const targetIds = await this.resolveMentionHandlesToUserIds(handles, allUsers);

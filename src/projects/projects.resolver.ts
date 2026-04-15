@@ -33,10 +33,11 @@ export class ProjectsResolver {
     @Mutation(() => ProjectType)
     @UseGuards(GqlAuthGuard)
     async updateProject(
+        @CurrentUser() user: any,
         @Args('id') id: string,
         @Args('input') input: UpdateProjectInput,
     ) {
-        return this.projectsService.update(id, input);
+        return this.projectsService.update(id, input, user.userId);
     }
 
     @Mutation(() => Boolean)
