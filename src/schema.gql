@@ -161,6 +161,7 @@ type Mutation {
   register(input: RegisterInput!): AuthResponse!
   reportActivity(metadata: JSON, type: String!): Boolean!
   setMyWorkSchedule(input: SetWorkScheduleInput!): WorkScheduleType!
+  setTaskReviewAdmins(userIds: [String!]!): [UserBasicType!]!
   setUserWorkSchedule(input: SetWorkScheduleInput!, userId: String!): WorkScheduleType!
   startTimeEntry(input: StartTimeEntryInput!): TimeEntryType!
   stopTimeEntry(effectiveDurationSeconds: Int): TimeEntryType!
@@ -263,6 +264,7 @@ type Query {
   sales(assignedToId: String): [Sale!]!
   task(id: String!): TaskType
   taskLists(projectId: String!): [TaskListType!]!
+  taskReviewAdmins: [UserBasicType!]!
   tasks(filters: TaskFiltersInput): [TaskType!]!
   tasksForSelection(filters: TaskFiltersInput): [TaskType!]!
   teamWorkSchedules: [TeamWorkScheduleRow!]!

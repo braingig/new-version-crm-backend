@@ -121,9 +121,20 @@ model User {
   activityEvents   ActivityEvent[]
   workIntervals    UserWorkInterval[]
 
+  /// When set, this admin receives “task ready for review” notifications if they are in the configured reviewer list (or when the list is empty = all admins).
+  taskReviewAdmin TaskReviewAdmin?
+
   @@index([email])
   @@index([role])
   @@index([status])
+}
+
+/// Admins selected to receive task review (REVIEW status) emails and in-app notifications.
+/// Empty table means all active admins are notified (default).
+model TaskReviewAdmin {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
 }
 
 model Project {

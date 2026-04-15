@@ -8,6 +8,7 @@ import {
     joinTextsForMentions,
 } from '../common/mentions/mention.util';
 import { MailService } from '../mail/mail.service';
+import { TaskReviewAdminsService } from '../task-review-admins/task-review-admins.service';
 import {
     htmlMentionEmail,
     htmlTaskAssignedEmail,
@@ -23,6 +24,7 @@ export class TasksService {
         private prisma: PrismaService,
         private notificationsService: NotificationsService,
         private mail: MailService,
+        private taskReviewAdminsService: TaskReviewAdminsService,
     ) {}
 
     private appName(): string {
@@ -854,8 +856,12 @@ export class TasksService {
         },
         submittedByUserId: string,
     ): Promise<void> {
+        const recipientIds =
+            await this.taskReviewAdminsService.resolveNotificationRecipientAdminIds();
+        if (recipientIds.length === 0) return;
+
         const admins = await this.prisma.user.findMany({
-            where: { role: UserRole.ADMIN },
+            where: { id: { in: recipientIds } },
             select: { id: true, name: true, email: true },
         });
         if (admins.length === 0) return;
@@ -888,6 +894,9 @@ export class TasksService {
         }
 
         for (const admin of admins) {
+            if (admin.id === submittedByUserId) {
+                continue;
+            }
             if (!admin.email) {
                 console.warn(`[TasksService] Skipping review email for admin ${admin.id}: no email.`);
                 continue;
