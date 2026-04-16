@@ -891,7 +891,9 @@ export class TasksService {
     }
 
     /**
-     * When a task moves to Review, notify every admin in-app and by email (excluding the submitter from in-app).
+     * When a task moves to Review, notify every configured admin in-app and by email.
+     * This includes the submitter when they are also an admin, so self-submitted
+     * admin tasks still trigger the same review alerts.
      */
     private async notifyAdminsTaskReadyForReview(
         task: {
@@ -927,9 +929,6 @@ export class TasksService {
         const ctx = this.taskEmailContext(task);
 
         for (const admin of admins) {
-            if (admin.id === submittedByUserId) {
-                continue;
-            }
             try {
                 await this.notificationsService.create(admin.id, {
                     title: 'Task ready for review',
@@ -943,14 +942,17 @@ export class TasksService {
         }
 
         for (const admin of admins) {
-            if (admin.id === submittedByUserId) {
-                continue;
-            }
             if (!admin.email) {
                 console.warn(`[TasksService] Skipping review email for admin ${admin.id}: no email.`);
                 continue;
             }
-            const html = htmlTaskReviewRequestedEmail(admin.name ?? 'there', ctx, submitterName);
+            const isSelfSubmitted = admin.id === submittedByUserId;
+            const html = htmlTaskReviewRequestedEmail(
+                admin.name ?? 'there',
+                ctx,
+                submitterName,
+                isSelfSubmitted,
+            );
             const mailResult = await this.mail.sendMailIfConfigured(
                 admin.email,
                 subjectTaskReviewRequested(task.title),

@@ -195,10 +195,14 @@ export function htmlTaskReviewRequestedEmail(
     recipientName: string,
     ctx: TaskEmailContext,
     submittedByName: string,
+    isSelfSubmitted = false,
 ): string {
+    const introLine = isSelfSubmitted
+        ? 'You moved a task to <strong>Review</strong>. Please open it and mark it <strong>Complete</strong> when you approve the work.'
+        : `<strong>${escapeHtml(submittedByName)}</strong> moved a task to <strong>Review</strong>. Please open it and mark it <strong>Complete</strong> when you approve the work.`;
     const inner = `
 <p style="margin:0 0 8px;font-size:18px;font-weight:600;color:#111827;">Hello ${escapeHtml(recipientName)},</p>
-<p style="margin:0 0 16px;color:#374151;"><strong>${escapeHtml(submittedByName)}</strong> moved a task to <strong>Review</strong>. Please open it and mark it <strong>Complete</strong> when you approve the work.</p>
+<p style="margin:0 0 16px;color:#374151;">${introLine}</p>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:6px;margin-top:8px;">
 ${detailRow('Task', `<strong>${escapeHtml(ctx.taskTitle)}</strong>`)}
 ${detailRow('Project', escapeHtml(ctx.projectName))}
