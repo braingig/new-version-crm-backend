@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { TaskStatus, TaskPriority, UserRole } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -17,11 +18,14 @@ import {
     subjectTaskAssigned,
     subjectTaskReviewRequested,
 } from '../mail/task-email.templates';
+import { promises as fs } from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class TasksService {
     constructor(
         private prisma: PrismaService,
+        private config: ConfigService,
         private notificationsService: NotificationsService,
         private mail: MailService,
         private taskReviewAdminsService: TaskReviewAdminsService,
@@ -508,6 +512,12 @@ export class TasksService {
     }
 
     async delete(id: string) {
+        const uploadRootCfg = this.config.get<string>('UPLOAD_DIR') || 'uploads';
+        const uploadRoot = path.isAbsolute(uploadRootCfg)
+            ? uploadRootCfg
+            : path.resolve(process.cwd(), uploadRootCfg);
+        const filePathsToDelete: string[] = [];
+
         // Delete task plus any related records that can block deletion
         await this.prisma.$transaction(async (tx) => {
             // Collect this task and its direct subtasks
@@ -525,6 +535,24 @@ export class TasksService {
 
             const taskIds = tasks.map((t) => t.id);
 
+            // Collect attachment file paths before deleting DB rows.
+            const attachments = await tx.taskAttachment.findMany({
+                where: { taskId: { in: taskIds } },
+                select: { relPath: true },
+            });
+            for (const a of attachments) {
+                const abs = path.resolve(uploadRoot, a.relPath);
+                // Safety guard: only delete inside upload root.
+                if (abs.startsWith(uploadRoot)) {
+                    filePathsToDelete.push(abs);
+                }
+            }
+
+            // Explicit delete (in addition to DB cascade) to keep logic clear.
+            await tx.taskAttachment.deleteMany({
+                where: { taskId: { in: taskIds } },
+            });
+
             // Remove time entries referencing these tasks
             await tx.timeEntry.deleteMany({
                 where: { taskId: { in: taskIds } },
@@ -540,6 +568,15 @@ export class TasksService {
                 where: { id: { in: taskIds } },
             });
         });
+
+        // Remove files from disk after DB transaction succeeds.
+        for (const abs of filePathsToDelete) {
+            try {
+                await fs.unlink(abs);
+            } catch {
+                // Ignore missing/already-removed files.
+            }
+        }
 
         return true;
     }

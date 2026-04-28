@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationType, ProjectStatus } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -7,11 +8,14 @@ import {
     joinTextsForMentions,
 } from '../common/mentions/mention.util';
 import { MailService } from '../mail/mail.service';
+import { promises as fs } from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class ProjectsService {
     constructor(
         private prisma: PrismaService,
+        private config: ConfigService,
         private notificationsService: NotificationsService,
         private mail: MailService,
     ) {}
@@ -187,9 +191,49 @@ export class ProjectsService {
     }
 
     async delete(id: string) {
-        await this.prisma.project.delete({
-            where: { id },
+        const uploadRootCfg = this.config.get<string>('UPLOAD_DIR') || 'uploads';
+        const uploadRoot = path.isAbsolute(uploadRootCfg)
+            ? uploadRootCfg
+            : path.resolve(process.cwd(), uploadRootCfg);
+        const filePathsToDelete = new Set<string>();
+
+        await this.prisma.$transaction(async (tx) => {
+            const project = await tx.project.findUnique({
+                where: { id },
+                select: { id: true },
+            });
+            if (!project) return;
+
+            const [projectAttachments, taskAttachments] = await Promise.all([
+                tx.projectAttachment.findMany({
+                    where: { projectId: id },
+                    select: { relPath: true },
+                }),
+                tx.taskAttachment.findMany({
+                    where: { task: { projectId: id } },
+                    select: { relPath: true },
+                }),
+            ]);
+
+            for (const a of [...projectAttachments, ...taskAttachments]) {
+                const abs = path.resolve(uploadRoot, a.relPath);
+                if (abs.startsWith(uploadRoot)) {
+                    filePathsToDelete.add(abs);
+                }
+            }
+
+            await tx.project.delete({
+                where: { id },
+            });
         });
+
+        for (const abs of filePathsToDelete) {
+            try {
+                await fs.unlink(abs);
+            } catch {
+                // Ignore missing/already-removed files.
+            }
+        }
         return true;
     }
 
