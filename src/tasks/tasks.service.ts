@@ -206,6 +206,17 @@ export class TasksService {
                                 email: true,
                             },
                         },
+                        attachments: {
+                            where: { deletedAt: null },
+                            select: {
+                                id: true,
+                                originalName: true,
+                                mimeType: true,
+                                size: true,
+                                createdAt: true,
+                            },
+                            orderBy: { createdAt: 'desc' },
+                        },
                         subTasks: {
                             include: {
                                 project: { select: { id: true, name: true } },
@@ -219,6 +230,17 @@ export class TasksService {
                             },
                         },
                     },
+                },
+                attachments: {
+                    where: { deletedAt: null },
+                    select: {
+                        id: true,
+                        originalName: true,
+                        mimeType: true,
+                        size: true,
+                        createdAt: true,
+                    },
+                    orderBy: { createdAt: 'desc' },
                 },
             },
             orderBy: {
@@ -266,6 +288,17 @@ export class TasksService {
                                 email: true,
                             },
                         },
+                        attachments: {
+                            where: { deletedAt: null },
+                            select: {
+                                id: true,
+                                originalName: true,
+                                mimeType: true,
+                                size: true,
+                                createdAt: true,
+                            },
+                            orderBy: { createdAt: 'desc' },
+                        },
                         subTasks: {
                             include: {
                                 assignedTo: {
@@ -292,6 +325,17 @@ export class TasksService {
                     orderBy: {
                         createdAt: 'desc',
                     },
+                },
+                attachments: {
+                    where: { deletedAt: null },
+                    select: {
+                        id: true,
+                        originalName: true,
+                        mimeType: true,
+                        size: true,
+                        createdAt: true,
+                    },
+                    orderBy: { createdAt: 'desc' },
                 },
             },
         });

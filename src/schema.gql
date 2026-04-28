@@ -211,6 +211,14 @@ type Payroll {
   updatedAt: DateTime!
 }
 
+type ProjectAttachmentType {
+  createdAt: DateTime!
+  id: String!
+  mimeType: String!
+  originalName: String!
+  size: Float!
+}
+
 type ProjectBasicType {
   id: String!
   name: String!
@@ -235,6 +243,7 @@ type ProjectTimeSummaryType {
 }
 
 type ProjectType {
+  attachments: [ProjectAttachmentType!]
   budget: Float!
   clientName: String
   createdAt: DateTime!
@@ -329,6 +338,14 @@ input StartTimeEntryInput {
   taskId: String
 }
 
+type TaskAttachmentType {
+  createdAt: DateTime!
+  id: String!
+  mimeType: String!
+  originalName: String!
+  size: Float!
+}
+
 input TaskFiltersInput {
   assignedToId: String
   listId: String
@@ -365,6 +382,7 @@ type TaskType {
   assignedTo: UserBasicType
   assignedToId: String
   assignees: [UserBasicType!]
+  attachments: [TaskAttachmentType!]
   comments: [CommentType!]
   createdAt: DateTime!
   createdBy: UserBasicType

@@ -239,6 +239,9 @@ export class TaskType {
     @Field(() => [CommentType], { nullable: true })
     comments?: CommentType[];
 
+    @Field(() => [TaskAttachmentType], { nullable: true })
+    attachments?: TaskAttachmentType[];
+
     @Field()
     createdAt: Date;
 
@@ -262,4 +265,22 @@ export class CommentType {
 
     @Field(() => UserBasicType, { nullable: true })
     user?: UserBasicType;
+}
+
+@ObjectType()
+export class TaskAttachmentType {
+    @Field()
+    id: string;
+
+    @Field()
+    originalName: string;
+
+    @Field()
+    mimeType: string;
+
+    @Field()
+    size: number;
+
+    @Field()
+    createdAt: Date;
 }

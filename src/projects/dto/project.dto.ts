@@ -160,4 +160,25 @@ export class ProjectType {
 
     @Field()
     updatedAt: Date;
+
+    @Field(() => [ProjectAttachmentType], { nullable: true })
+    attachments?: ProjectAttachmentType[];
+}
+
+@ObjectType()
+export class ProjectAttachmentType {
+    @Field()
+    id: string;
+
+    @Field()
+    originalName: string;
+
+    @Field()
+    mimeType: string;
+
+    @Field()
+    size: number;
+
+    @Field()
+    createdAt: Date;
 }

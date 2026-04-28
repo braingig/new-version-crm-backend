@@ -76,6 +76,17 @@ export class ProjectsService {
                         status: true,
                     },
                 },
+                attachments: {
+                    where: { deletedAt: null },
+                    select: {
+                        id: true,
+                        originalName: true,
+                        mimeType: true,
+                        size: true,
+                        createdAt: true,
+                    },
+                    orderBy: { createdAt: 'desc' },
+                },
             },
             orderBy: {
                 createdAt: 'desc',
@@ -105,6 +116,17 @@ export class ProjectsService {
                             },
                         },
                     },
+                },
+                attachments: {
+                    where: { deletedAt: null },
+                    select: {
+                        id: true,
+                        originalName: true,
+                        mimeType: true,
+                        size: true,
+                        createdAt: true,
+                    },
+                    orderBy: { createdAt: 'desc' },
                 },
             },
         });

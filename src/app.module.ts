@@ -20,6 +20,7 @@ import { TaskListsModule } from './task-lists/task-lists.module';
 import { WorkScheduleModule } from './work-schedule/work-schedule.module';
 import { MailModule } from './mail/mail.module';
 import { TaskReviewAdminsModule } from './task-review-admins/task-review-admins.module';
+import { AttachmentsModule } from './attachments/attachments.module';
 
 @Module({
     imports: [
@@ -56,6 +57,7 @@ import { TaskReviewAdminsModule } from './task-review-admins/task-review-admins.
         WorkScheduleModule,
         MailModule,
         TaskReviewAdminsModule,
+        AttachmentsModule,
     ],
 })
 export class AppModule { }
