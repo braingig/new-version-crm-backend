@@ -1,4 +1,5 @@
 import {
+    BadRequestException,
     Body,
     Controller,
     Delete,
@@ -7,11 +8,11 @@ import {
     Post,
     Req,
     Res,
-    UploadedFile,
+    UploadedFiles,
     UseGuards,
     UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AttachmentsService } from './attachments.service';
 import { Request, Response } from 'express';
@@ -45,8 +46,14 @@ async function ensureDirSyncish(dir: string) {
     fss.mkdirSync(dir, { recursive: true });
 }
 
-function uploadFileInterceptor() {
-    return FileInterceptor('file', {
+function uploadFilesInterceptor() {
+    return FileFieldsInterceptor(
+        [
+            // Keep backward compatibility with previous single-file field name.
+            { name: 'file', maxCount: 20 },
+            { name: 'files', maxCount: 20 },
+        ],
+        {
         storage: diskStorage({
             destination: (_req, _file, cb) => {
                 const dir = path.join(tmpDirAbs(), new Date().toISOString().slice(0, 10));
@@ -63,7 +70,8 @@ function uploadFileInterceptor() {
             },
         }),
         limits: { fileSize: maxBytes() },
-    });
+        },
+    );
 }
 
 @Controller('attachments')
@@ -78,57 +86,82 @@ export class AttachmentsController {
     }
 
     @Post('tasks')
-    @UseInterceptors(uploadFileInterceptor())
+    @UseInterceptors(uploadFilesInterceptor())
     async uploadTaskAttachment(
         @Req() req: AuthedRequest,
-        @UploadedFile() file: Express.Multer.File,
+        @UploadedFiles()
+        filesByField: { file?: Express.Multer.File[]; files?: Express.Multer.File[] },
         @Body('taskId') taskId?: string,
         @Body('draftKey') draftKey?: string,
     ) {
-        if (!file) {
-            return { ok: false, message: 'No file uploaded.' };
+        const files = [...(filesByField?.file ?? []), ...(filesByField?.files ?? [])];
+        if (files.length === 0) {
+            throw new BadRequestException('No files uploaded.');
         }
-        const created = await this.attachments.createTaskAttachment({
-            userId: this.userId(req),
-            taskId: taskId || undefined,
-            draftKey: draftKey || undefined,
-            tmpAbsPath: file.path,
-            originalName: file.originalname,
-            mimeType: file.mimetype,
-            size: file.size,
-        });
+        const userId = this.userId(req);
+        const created = await Promise.all(
+            files.map((file) =>
+                this.attachments.createTaskAttachment({
+                    userId,
+                    taskId: taskId || undefined,
+                    draftKey: draftKey || undefined,
+                    tmpAbsPath: file.path,
+                    originalName: file.originalname,
+                    mimeType: file.mimetype,
+                    size: file.size,
+                }),
+            ),
+        );
+        const attachments = created.map((a) => ({
+            attachment: a,
+            url: `/api/attachments/tasks/${a.id}/download`,
+        }));
         return {
             ok: true,
-            attachment: created,
-            // URL is stable; frontend can use it inside richtext
-            url: `/api/attachments/tasks/${created.id}/download`,
+            // Keep old shape for single-file flows.
+            attachment: attachments[0]?.attachment,
+            url: attachments[0]?.url,
+            attachments,
         };
     }
 
     @Post('projects')
-    @UseInterceptors(uploadFileInterceptor())
+    @UseInterceptors(uploadFilesInterceptor())
     async uploadProjectAttachment(
         @Req() req: AuthedRequest,
-        @UploadedFile() file: Express.Multer.File,
+        @UploadedFiles()
+        filesByField: { file?: Express.Multer.File[]; files?: Express.Multer.File[] },
         @Body('projectId') projectId?: string,
         @Body('draftKey') draftKey?: string,
     ) {
-        if (!file) {
-            return { ok: false, message: 'No file uploaded.' };
+        const files = [...(filesByField?.file ?? []), ...(filesByField?.files ?? [])];
+        if (files.length === 0) {
+            throw new BadRequestException('No files uploaded.');
         }
-        const created = await this.attachments.createProjectAttachment({
-            userId: this.userId(req),
-            projectId: projectId || undefined,
-            draftKey: draftKey || undefined,
-            tmpAbsPath: file.path,
-            originalName: file.originalname,
-            mimeType: file.mimetype,
-            size: file.size,
-        });
+        const userId = this.userId(req);
+        const created = await Promise.all(
+            files.map((file) =>
+                this.attachments.createProjectAttachment({
+                    userId,
+                    projectId: projectId || undefined,
+                    draftKey: draftKey || undefined,
+                    tmpAbsPath: file.path,
+                    originalName: file.originalname,
+                    mimeType: file.mimetype,
+                    size: file.size,
+                }),
+            ),
+        );
+        const attachments = created.map((a) => ({
+            attachment: a,
+            url: `/api/attachments/projects/${a.id}/download`,
+        }));
         return {
             ok: true,
-            attachment: created,
-            url: `/api/attachments/projects/${created.id}/download`,
+            // Keep old shape for single-file flows.
+            attachment: attachments[0]?.attachment,
+            url: attachments[0]?.url,
+            attachments,
         };
     }
 
