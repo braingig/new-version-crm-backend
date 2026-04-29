@@ -91,6 +91,18 @@ export class AttachmentsService {
         return abs;
     }
 
+    private stripAttachmentLinkFromRichText(html: string | null | undefined, attachmentId: string): string | null {
+        const input = html ?? '';
+        if (!input) return html ?? null;
+        const escapedId = attachmentId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pattern = new RegExp(
+            `<p>\\s*<a[^>]*data-attachment-id=["']${escapedId}["'][^>]*>[\\s\\S]*?<\\/a>\\s*<\\/p>`,
+            'gi',
+        );
+        const cleaned = input.replace(pattern, '');
+        return cleaned;
+    }
+
     async createTaskAttachment(params: {
         userId: string;
         taskId?: string;
@@ -315,7 +327,8 @@ export class AttachmentsService {
     }
 
     async deleteAttachmentNow(kind: AttachmentKind, attachmentId: string, userId: string) {
-        const { attachment } = await this.assertCanAccessAttachment(kind, attachmentId, userId);
+        const access = await this.assertCanAccessAttachment(kind, attachmentId, userId);
+        const attachment = access.attachment;
 
         // Delete file from disk first (best effort), then hard-delete DB row.
         const absPath = this.attachmentAbsPath(attachment.relPath);
@@ -326,12 +339,68 @@ export class AttachmentsService {
         }
 
         if (kind === 'task') {
+            const taskAttachment = attachment as Awaited<
+                ReturnType<PrismaService['taskAttachment']['findUnique']>
+            >;
+            if (taskAttachment?.taskId) {
+                const task = await this.prisma.task.findUnique({
+                    where: { id: taskAttachment.taskId },
+                    select: { description: true, note: true },
+                });
+                if (task) {
+                    const nextDescription = this.stripAttachmentLinkFromRichText(
+                        task.description,
+                        taskAttachment.id,
+                    );
+                    const nextNote = this.stripAttachmentLinkFromRichText(
+                        task.note,
+                        taskAttachment.id,
+                    );
+                    if (nextDescription !== task.description || nextNote !== task.note) {
+                        await this.prisma.task.update({
+                            where: { id: taskAttachment.taskId },
+                            data: {
+                                description: nextDescription,
+                                note: nextNote,
+                            },
+                        });
+                    }
+                }
+            }
             await this.prisma.taskAttachment.delete({
-                where: { id: attachment.id },
+                where: { id: taskAttachment!.id },
             });
         } else {
+            const projectAttachment = attachment as Awaited<
+                ReturnType<PrismaService['projectAttachment']['findUnique']>
+            >;
+            if (projectAttachment?.projectId) {
+                const project = await this.prisma.project.findUnique({
+                    where: { id: projectAttachment.projectId },
+                    select: { description: true, note: true },
+                });
+                if (project) {
+                    const nextDescription = this.stripAttachmentLinkFromRichText(
+                        project.description,
+                        projectAttachment.id,
+                    );
+                    const nextNote = this.stripAttachmentLinkFromRichText(
+                        project.note,
+                        projectAttachment.id,
+                    );
+                    if (nextDescription !== project.description || nextNote !== project.note) {
+                        await this.prisma.project.update({
+                            where: { id: projectAttachment.projectId },
+                            data: {
+                                description: nextDescription,
+                                note: nextNote,
+                            },
+                        });
+                    }
+                }
+            }
             await this.prisma.projectAttachment.delete({
-                where: { id: attachment.id },
+                where: { id: projectAttachment!.id },
             });
         }
 
