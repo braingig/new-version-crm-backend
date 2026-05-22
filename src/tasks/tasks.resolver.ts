@@ -3,8 +3,17 @@ import { UseGuards } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { TaskType, CreateTaskInput, UpdateTaskInput, TaskFiltersInput, CommentType } from './dto/task.dto';
+import {
+    TaskType,
+    CreateTaskInput,
+    UpdateTaskInput,
+    TaskFiltersInput,
+    CommentType,
+    TaskCommentFeedType,
+    TaskMentionFeedType,
+} from './dto/task.dto';
 import { UserBasicType } from '../projects/dto/project.dto';
+import { UserRole } from '@prisma/client';
 
 @Resolver(() => TaskType)
 export class TasksResolver {
@@ -31,6 +40,18 @@ export class TasksResolver {
     @UseGuards(GqlAuthGuard)
     async task(@Args('id') id: string) {
         return this.tasksService.findOne(id);
+    }
+
+    @Query(() => [TaskCommentFeedType])
+    @UseGuards(GqlAuthGuard)
+    async myTaskComments(@CurrentUser() user: { userId: string; role: UserRole }) {
+        return this.tasksService.findMyTaskComments(user.userId, user.role);
+    }
+
+    @Query(() => [TaskMentionFeedType])
+    @UseGuards(GqlAuthGuard)
+    async myTaskMentions(@CurrentUser() user: { userId: string }) {
+        return this.tasksService.findMyTaskMentions(user.userId);
     }
 
     @Mutation(() => TaskType)

@@ -140,6 +140,12 @@ export class TaskFiltersInput {
     @IsString()
     assignedToId?: string;
 
+    /** Flat list of all tasks (including subtasks) assigned to this user via assignee or taskAssignees. */
+    @Field({ nullable: true })
+    @IsOptional()
+    @IsString()
+    assigneeId?: string;
+
     @Field({ nullable: true })
     @IsOptional()
     @IsString()
@@ -172,6 +178,15 @@ export class ParentTaskInfoType {
 
     @Field()
     title: string;
+}
+
+@ObjectType()
+export class TaskListBasicType {
+    @Field()
+    id: string;
+
+    @Field()
+    name: string;
 }
 
 @ObjectType()
@@ -224,6 +239,9 @@ export class TaskType {
     @Field(() => ProjectBasicType, { nullable: true })
     project?: ProjectBasicType;
 
+    @Field(() => TaskListBasicType, { nullable: true })
+    list?: TaskListBasicType;
+
     @Field(() => ParentTaskInfoType, { nullable: true })
     parentTask?: ParentTaskInfoType;
 
@@ -265,6 +283,65 @@ export class CommentType {
 
     @Field(() => UserBasicType, { nullable: true })
     user?: UserBasicType;
+}
+
+/** Task @mention for the current user (My Tasks feed; task must still exist). */
+@ObjectType()
+export class TaskMentionFeedType {
+    @Field()
+    id: string;
+
+    @Field()
+    message: string;
+
+    @Field()
+    isRead: boolean;
+
+    @Field()
+    createdAt: Date;
+
+    @Field()
+    taskId: string;
+
+    @Field()
+    taskTitle: string;
+
+    /** Where the @mention lives: comment, description, or note. */
+    @Field()
+    contextType: string;
+
+    /** Plain-text preview of the mention context. */
+    @Field()
+    excerpt: string;
+
+    /** Hash on the task page to scroll to (e.g. task-comments). */
+    @Field()
+    focusHash: string;
+}
+
+/** Recent comment on a task assigned to the current user (My Tasks feed). */
+@ObjectType()
+export class TaskCommentFeedType {
+    @Field()
+    id: string;
+
+    @Field()
+    taskId: string;
+
+    @Field()
+    content: string;
+
+    @Field()
+    createdAt: Date;
+
+    @Field(() => UserBasicType, { nullable: true })
+    user?: UserBasicType;
+
+    @Field()
+    taskTitle: string;
+
+    @Field()
+    projectName: string;
 }
 
 @ObjectType()

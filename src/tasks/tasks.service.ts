@@ -139,39 +139,384 @@ export class TasksService {
                 },
             });
             await this.notifyTaskAssigned(result!, userId);
-            await this.notifyUsersMentionedInTexts(
-                [result!.description ?? '', result!.note ?? ''],
-                { id: result!.id, title: result!.title },
-                userId,
-                'task_field',
-            );
+            const createdDesc = result!.description ?? '';
+            const createdNote = result!.note ?? '';
+            if (createdDesc) {
+                await this.notifyUsersMentionedInTexts(
+                    [createdDesc],
+                    { id: result!.id, title: result!.title },
+                    userId,
+                    'task_field',
+                    'description',
+                );
+            }
+            if (createdNote) {
+                await this.notifyUsersMentionedInTexts(
+                    [createdNote],
+                    { id: result!.id, title: result!.title },
+                    userId,
+                    'task_field',
+                    'note',
+                );
+            }
             return result!;
         }
         if (assignedToId) {
             await this.notifyTaskAssigned(task, userId);
         }
-        await this.notifyUsersMentionedInTexts(
-            [task.description ?? '', task.note ?? ''],
-            { id: task.id, title: task.title },
-            userId,
-            'task_field',
-        );
+        const desc = task.description ?? '';
+        const note = task.note ?? '';
+        if (desc) {
+            await this.notifyUsersMentionedInTexts(
+                [desc],
+                { id: task.id, title: task.title },
+                userId,
+                'task_field',
+                'description',
+            );
+        }
+        if (note) {
+            await this.notifyUsersMentionedInTexts(
+                [note],
+                { id: task.id, title: task.title },
+                userId,
+                'task_field',
+                'note',
+            );
+        }
         return task;
+    }
+
+    private assigneeWhere(userId: string) {
+        return {
+            OR: [
+                { assignedToId: userId },
+                { taskAssignees: { some: { userId } } },
+            ],
+        };
+    }
+
+    private static readonly TASK_MENTION_TITLES = [
+        'You were mentioned in a comment',
+        'You were mentioned on a task',
+    ] as const;
+
+    private parseTaskIdFromNotificationLink(link?: string | null): string | null {
+        if (!link) return null;
+        const m = link.match(/\/dashboard\/tasks\/([^/?#]+)/);
+        return m?.[1] ?? null;
+    }
+
+    private parseFocusHashFromNotificationLink(link?: string | null): string | null {
+        if (!link) return null;
+        const m = link.match(/#([a-zA-Z0-9-]+)/);
+        return m?.[1] ?? null;
+    }
+
+    private parseTaskTitleFromMentionMessage(message: string): string | null {
+        const m = message.match(/"([^"]+)"/);
+        return m?.[1] ?? null;
+    }
+
+    private textHasResolvableMentions(
+        text: string | null | undefined,
+        allUsers: { name: string }[],
+    ): boolean {
+        if (!text?.trim()) return false;
+        if (text.includes('data-type="mention"')) return true;
+        const plain = this.stripHtmlForMentions(text);
+        if (!plain.includes('@')) return false;
+        const names = allUsers.map((u) => u.name);
+        return extractMentionHandlesWithCatalog(plain, names).length > 0;
+    }
+
+    /** User ids @mentioned in the given texts (same rules as notifyUsersMentionedInTexts). */
+    private async collectMentionTargetUserIds(
+        texts: string[],
+        allUsers?: { id: string; name: string; email: string }[],
+    ): Promise<string[]> {
+        const users =
+            allUsers ??
+            (await this.prisma.user.findMany({
+                where: { status: 'ACTIVE' },
+                select: { id: true, name: true, email: true },
+            }));
+        const htmlHandles = texts.flatMap((t) =>
+            this.extractMentionHandlesFromRichHtml(t ?? ''),
+        );
+        const plainTexts = texts.map((t) => this.stripHtmlForMentions(t ?? ''));
+        const combined = joinTextsForMentions(plainTexts);
+        const names = users.map((u) => u.name);
+        const plainHandles = combined.includes('@')
+            ? extractMentionHandlesWithCatalog(combined, names)
+            : [];
+        const handles = [...new Set([...htmlHandles, ...plainHandles])];
+        if (handles.length === 0) return [];
+        return this.resolveMentionHandlesToUserIds(handles, users);
+    }
+
+    /** True if task description, note, or any comment still @mentions this user. */
+    private async taskStillMentionsUser(
+        task: {
+            description: string | null;
+            note: string | null;
+            comments: { content: string }[];
+        },
+        userId: string,
+        allUsers?: { id: string; name: string; email: string }[],
+    ): Promise<boolean> {
+        const texts = [
+            task.description,
+            task.note,
+            ...task.comments.map((c) => c.content),
+        ].filter((t): t is string => Boolean(t?.trim()));
+        if (texts.length === 0) return false;
+        const ids = await this.collectMentionTargetUserIds(texts, allUsers);
+        return ids.includes(userId);
+    }
+
+    /** Remove task @mention notifications for users no longer mentioned on the task. */
+    private async pruneStaleTaskMentionNotifications(taskId: string): Promise<void> {
+        const task = await this.prisma.task.findUnique({
+            where: { id: taskId },
+            select: {
+                description: true,
+                note: true,
+                comments: { select: { content: true } },
+            },
+        });
+        if (!task) return;
+
+        const allUsers = await this.prisma.user.findMany({
+            where: { status: 'ACTIVE' },
+            select: { id: true, name: true, email: true },
+        });
+        const texts = [
+            task.description,
+            task.note,
+            ...task.comments.map((c) => c.content),
+        ].filter((t): t is string => Boolean(t?.trim()));
+        const stillMentioned = new Set(
+            texts.length > 0
+                ? await this.collectMentionTargetUserIds(texts, allUsers)
+                : [],
+        );
+
+        const notifications = await this.prisma.notification.findMany({
+            where: {
+                title: { in: [...TasksService.TASK_MENTION_TITLES] },
+                link: { contains: `/dashboard/tasks/${taskId}` },
+            },
+            select: { id: true, userId: true },
+        });
+        const staleIds = notifications
+            .filter((n) => !stillMentioned.has(n.userId))
+            .map((n) => n.id);
+        if (staleIds.length === 0) return;
+        await this.prisma.notification.deleteMany({ where: { id: { in: staleIds } } });
+    }
+
+    private mentionExcerptPlain(raw: string | null | undefined, max = 280): string {
+        const plain = this.stripHtmlForMentions(raw ?? '');
+        if (!plain) return '';
+        return plain.length > max ? `${plain.slice(0, max)}…` : plain;
+    }
+
+    private resolveMentionContext(
+        notification: { title: string; createdAt: Date; link?: string | null },
+        task: {
+            description: string | null;
+            note: string | null;
+            comments: { content: string; createdAt: Date }[];
+        },
+        allUsers: { name: string }[],
+    ): {
+        contextType: 'comment' | 'description' | 'note';
+        excerpt: string;
+        focusHash: string;
+    } | null {
+        const notifAt = notification.createdAt.getTime();
+        const hash = this.parseFocusHashFromNotificationLink(notification.link);
+
+        if (hash === 'task-note') {
+            return {
+                contextType: 'note',
+                excerpt:
+                    this.mentionExcerptPlain(task.note) ||
+                    'Open the note to read the mention.',
+                focusHash: 'task-note',
+            };
+        }
+
+        if (hash === 'task-description') {
+            return {
+                contextType: 'description',
+                excerpt:
+                    this.mentionExcerptPlain(task.description) ||
+                    'Open the description to read the mention.',
+                focusHash: 'task-description',
+            };
+        }
+
+        if (
+            hash === 'task-comments' ||
+            notification.title === 'You were mentioned in a comment'
+        ) {
+            const withMention = task.comments.filter((c) =>
+                this.textHasResolvableMentions(c.content, allUsers),
+            );
+            const pool = withMention.length > 0 ? withMention : task.comments;
+            const best =
+                pool.length > 0
+                    ? pool.reduce((a, b) =>
+                          Math.abs(a.createdAt.getTime() - notifAt) <
+                          Math.abs(b.createdAt.getTime() - notifAt)
+                              ? a
+                              : b,
+                      )
+                    : null;
+            const excerpt = best
+                ? this.mentionExcerptPlain(best.content)
+                : '';
+            return {
+                contextType: 'comment',
+                excerpt: excerpt || 'Open comments to read the mention.',
+                focusHash: 'task-comments',
+            };
+        }
+
+        if (this.textHasResolvableMentions(task.description, allUsers)) {
+            return {
+                contextType: 'description',
+                excerpt: this.mentionExcerptPlain(task.description),
+                focusHash: 'task-description',
+            };
+        }
+
+        if (this.textHasResolvableMentions(task.note, allUsers)) {
+            return {
+                contextType: 'note',
+                excerpt: this.mentionExcerptPlain(task.note),
+                focusHash: 'task-note',
+            };
+        }
+
+        return null;
+    }
+
+    /** @mentions on tasks that still exist (My Tasks read-only feed). */
+    async findMyTaskMentions(userId: string, limit = 50) {
+        const notifications = await this.prisma.notification.findMany({
+            where: {
+                userId,
+                title: { in: [...TasksService.TASK_MENTION_TITLES] },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: limit * 3,
+        });
+
+        const taskIdByNotificationId = new Map<string, string>();
+        const taskIds = new Set<string>();
+        for (const n of notifications) {
+            const taskId = this.parseTaskIdFromNotificationLink(n.link);
+            if (!taskId) continue;
+            taskIdByNotificationId.set(n.id, taskId);
+            taskIds.add(taskId);
+        }
+
+        if (taskIds.size === 0) return [];
+
+        const existingTasks = await this.prisma.task.findMany({
+            where: { id: { in: [...taskIds] } },
+            select: {
+                id: true,
+                title: true,
+                description: true,
+                note: true,
+                comments: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 30,
+                    select: { content: true, createdAt: true },
+                },
+            },
+        });
+        const taskById = new Map(existingTasks.map((t) => [t.id, t]));
+        const existingIds = new Set(existingTasks.map((t) => t.id));
+        const allUsers = await this.prisma.user.findMany({
+            where: { status: 'ACTIVE' },
+            select: { id: true, name: true, email: true },
+        });
+
+        const out: {
+            id: string;
+            message: string;
+            isRead: boolean;
+            createdAt: Date;
+            taskId: string;
+            taskTitle: string;
+            contextType: string;
+            excerpt: string;
+            focusHash: string;
+        }[] = [];
+        const staleNotificationIds: string[] = [];
+
+        for (const n of notifications) {
+            if (out.length >= limit) break;
+            const taskId = taskIdByNotificationId.get(n.id);
+            if (!taskId || !existingIds.has(taskId)) continue;
+            const task = taskById.get(taskId)!;
+            const stillMentions = await this.taskStillMentionsUser(task, userId, allUsers);
+            if (!stillMentions) {
+                staleNotificationIds.push(n.id);
+                continue;
+            }
+            const ctx = this.resolveMentionContext(n, task, allUsers);
+            if (!ctx) continue;
+            out.push({
+                id: n.id,
+                message: n.message,
+                isRead: n.isRead,
+                createdAt: n.createdAt,
+                taskId,
+                taskTitle:
+                    task.title ??
+                    this.parseTaskTitleFromMentionMessage(n.message) ??
+                    'Task',
+                contextType: ctx.contextType,
+                excerpt: ctx.excerpt,
+                focusHash: ctx.focusHash,
+            });
+        }
+
+        if (staleNotificationIds.length > 0) {
+            await this.prisma.notification.deleteMany({
+                where: { id: { in: staleNotificationIds } },
+            });
+        }
+
+        return out;
     }
 
     async findAll(filters?: {
         projectId?: string;
         listId?: string;
         assignedToId?: string;
+        assigneeId?: string;
         status?: TaskStatus;
         priority?: TaskPriority;
     }) {
+        const myTasksMode = !!filters?.assigneeId;
+        const assigneeUserId = filters?.assigneeId ?? filters?.assignedToId;
+
         return this.prisma.task.findMany({
             where: {
-                parentTaskId: null, // Only get parent tasks
+                ...(myTasksMode
+                    ? this.assigneeWhere(filters!.assigneeId!)
+                    : assigneeUserId
+                      ? { ...this.assigneeWhere(assigneeUserId), parentTaskId: null }
+                      : { parentTaskId: null }),
                 ...(filters?.projectId && { projectId: filters.projectId }),
                 ...(filters?.listId && { listId: filters.listId }),
-                ...(filters?.assignedToId && { assignedToId: filters.assignedToId }),
                 ...(filters?.status && { status: filters.status }),
                 ...(filters?.priority && { priority: filters.priority }),
             },
@@ -182,6 +527,12 @@ export class TasksService {
                         name: true,
                     },
                 },
+                list: myTasksMode
+                    ? { select: { id: true, name: true } }
+                    : false,
+                parentTask: myTasksMode
+                    ? { select: { id: true, title: true } }
+                    : false,
                 assignedTo: {
                     select: {
                         id: true,
@@ -200,7 +551,9 @@ export class TasksService {
                         name: true,
                     },
                 },
-                subTasks: {
+                subTasks: myTasksMode
+                    ? false
+                    : {
                     include: {
                         project: { select: { id: true, name: true } },
                         assignedTo: {
@@ -235,21 +588,23 @@ export class TasksService {
                         },
                     },
                 },
-                attachments: {
-                    where: { deletedAt: null },
-                    select: {
-                        id: true,
-                        originalName: true,
-                        mimeType: true,
-                        size: true,
-                        createdAt: true,
-                    },
-                    orderBy: { createdAt: 'desc' },
-                },
+                attachments: myTasksMode
+                    ? false
+                    : {
+                          where: { deletedAt: null },
+                          select: {
+                              id: true,
+                              originalName: true,
+                              mimeType: true,
+                              size: true,
+                              createdAt: true,
+                          },
+                          orderBy: { createdAt: 'desc' },
+                      },
             },
-            orderBy: {
-                createdAt: 'desc',
-            },
+            orderBy: myTasksMode
+                ? [{ dueDate: { sort: 'asc', nulls: 'last' } }, { priority: 'desc' }, { createdAt: 'desc' }]
+                : { createdAt: 'desc' },
         });
     }
 
@@ -463,22 +818,26 @@ export class TasksService {
                     this.notifyTaskStatusChangeToAdminAndAssigner(updated, updatedByUserId);
                 }
             }
-            const mentionTexts: string[] = [];
             if (changedFields.includes('Description')) {
-                mentionTexts.push(updated.description ?? '');
-            }
-            if (changedFields.includes('Note')) {
-                mentionTexts.push(updated.note ?? '');
-            }
-            if (mentionTexts.length > 0) {
                 await this.notifyUsersMentionedInTexts(
-                    mentionTexts,
+                    [updated.description ?? ''],
                     { id: updated.id, title: updated.title },
                     updatedByUserId,
                     'task_field',
+                    'description',
+                );
+            }
+            if (changedFields.includes('Note')) {
+                await this.notifyUsersMentionedInTexts(
+                    [updated.note ?? ''],
+                    { id: updated.id, title: updated.title },
+                    updatedByUserId,
+                    'task_field',
+                    'note',
                 );
             }
         }
+        await this.pruneStaleTaskMentionNotifications(id);
         return updated;
     }
 
@@ -563,6 +922,15 @@ export class TasksService {
                 where: { taskId: { in: taskIds } },
             });
 
+            // Drop in-app notifications that link to these tasks
+            await tx.notification.deleteMany({
+                where: {
+                    link: {
+                        in: taskIds.map((tid) => `/dashboard/tasks/${tid}`),
+                    },
+                },
+            });
+
             // Finally delete the tasks (parent + subtasks)
             await tx.task.deleteMany({
                 where: { id: { in: taskIds } },
@@ -636,6 +1004,52 @@ export class TasksService {
             );
         }
         return comment;
+    }
+
+    /**
+     * My Tasks comment feed:
+     * - Everyone: comments on tasks assigned to you (including your own).
+     * - Admins: also comments you posted on any task (e.g. on a teammate's task).
+     */
+    async findMyTaskComments(
+        userId: string,
+        role: UserRole,
+        limit = 25,
+    ) {
+        const onMyTasks = { task: this.assigneeWhere(userId) };
+        const where =
+            role === UserRole.ADMIN
+                ? {
+                      OR: [onMyTasks, { userId }],
+                  }
+                : onMyTasks;
+
+        const rows = await this.prisma.comment.findMany({
+            where,
+            include: {
+                user: {
+                    select: { id: true, name: true, email: true },
+                },
+                task: {
+                    select: {
+                        id: true,
+                        title: true,
+                        project: { select: { name: true } },
+                    },
+                },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+        });
+        return rows.map((c) => ({
+            id: c.id,
+            taskId: c.taskId,
+            content: c.content,
+            createdAt: c.createdAt,
+            user: c.user,
+            taskTitle: c.task.title,
+            projectName: c.task.project?.name ?? 'Project',
+        }));
     }
 
     /**
@@ -751,33 +1165,23 @@ export class TasksService {
         task: { id: string; title: string },
         authorUserId: string,
         kind: 'comment' | 'task_field',
+        taskField?: 'description' | 'note',
     ): Promise<void> {
-        const htmlHandles = texts.flatMap((t) =>
-            this.extractMentionHandlesFromRichHtml(t ?? ''),
-        );
-        const plainTexts = texts.map((t) => this.stripHtmlForMentions(t ?? ''));
-        const combined = joinTextsForMentions(plainTexts);
-
         const allUsers = await this.prisma.user.findMany({
             where: { status: 'ACTIVE' },
             select: { id: true, name: true, email: true },
         });
-        const names = allUsers.map((u) => u.name);
-        const plainHandles = combined.includes('@')
-            ? extractMentionHandlesWithCatalog(combined, names)
-            : [];
-        const handles = [...new Set([...htmlHandles, ...plainHandles])];
-        if (handles.length === 0) return;
-
-        const targetIds = await this.resolveMentionHandlesToUserIds(handles, allUsers);
+        const targetIds = await this.collectMentionTargetUserIds(texts, allUsers);
         if (targetIds.length === 0) return;
+
+        const plainTexts = texts.map((t) => this.stripHtmlForMentions(t ?? ''));
+        const combined = joinTextsForMentions(plainTexts);
 
         const author = await this.prisma.user.findUnique({
             where: { id: authorUserId },
             select: { name: true },
         });
         const authorName = author?.name ?? 'Someone';
-        const link = `/dashboard/tasks/${task.id}`;
         const title =
             kind === 'comment'
                 ? 'You were mentioned in a comment'
@@ -795,18 +1199,32 @@ export class TasksService {
         const contextLabel =
             kind === 'comment'
                 ? 'in a comment on this task'
-                : 'in the task description or notes';
-        const excerpt =
+                : taskField === 'note'
+                  ? 'in the task note'
+                  : 'in the task description';
+        const excerptRaw =
             kind === 'comment' ? this.stripHtmlForMentions(texts[0] ?? '') : combined;
+        const excerptShort = excerptRaw
+            ? excerptRaw.slice(0, 200) + (excerptRaw.length > 200 ? '…' : '')
+            : '';
+        const focusHash =
+            kind === 'comment'
+                ? 'task-comments'
+                : taskField === 'note'
+                  ? 'task-note'
+                  : 'task-description';
+        const linkWithFocus = `/dashboard/tasks/${task.id}#${focusHash}`;
 
         for (const uid of targetIds) {
             if (uid === authorUserId) continue;
             try {
                 await this.notificationsService.create(uid, {
                     title,
-                    message: `${authorName} ${action} "${task.title}".`,
+                    message: excerptShort
+                        ? `${authorName} ${action} "${task.title}" — ${excerptShort}`
+                        : `${authorName} ${action} "${task.title}".`,
                     type: NotificationType.INFO,
-                    link,
+                    link: linkWithFocus,
                 });
             } catch (err) {
                 console.error('Failed to notify mentioned user', uid, err);
@@ -819,7 +1237,7 @@ export class TasksService {
                         ...this.taskEmailContext(fullTask),
                         authorName,
                         contextLabel,
-                        excerpt,
+                        excerpt: excerptShort,
                     };
                     const html = htmlMentionEmail(mentionedUser.name, ctx);
                     await this.mail.sendMailIfConfigured(

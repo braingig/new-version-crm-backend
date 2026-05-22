@@ -265,6 +265,8 @@ type Query {
   employeeDailyActivity(employeeId: String, endDate: DateTime!, startDate: DateTime!): [EmployeeDailyActivityType!]!
   employeeWorkType: WorkType
   me: UserType!
+  myTaskComments: [TaskCommentFeedType!]!
+  myTaskMentions: [TaskMentionFeedType!]!
   notificationUnreadCount: Float!
   notifications: [NotificationDto!]!
   payrolls(employeeId: String): [Payroll!]!
@@ -346,12 +348,28 @@ type TaskAttachmentType {
   size: Float!
 }
 
+type TaskCommentFeedType {
+  content: String!
+  createdAt: DateTime!
+  id: String!
+  projectName: String!
+  taskId: String!
+  taskTitle: String!
+  user: UserBasicType
+}
+
 input TaskFiltersInput {
   assignedToId: String
+  assigneeId: String
   listId: String
   priority: TaskPriority
   projectId: String
   status: TaskStatus
+}
+
+type TaskListBasicType {
+  id: String!
+  name: String!
 }
 
 type TaskListType {
@@ -362,6 +380,18 @@ type TaskListType {
   order: Float!
   projectId: String!
   updatedAt: DateTime!
+}
+
+type TaskMentionFeedType {
+  contextType: String!
+  createdAt: DateTime!
+  excerpt: String!
+  focusHash: String!
+  id: String!
+  isRead: Boolean!
+  message: String!
+  taskId: String!
+  taskTitle: String!
 }
 
 enum TaskPriority {
@@ -390,6 +420,7 @@ type TaskType {
   dueDate: DateTime
   estimatedTime: Float
   id: String!
+  list: TaskListBasicType
   listId: String
   note: String
   parentTask: ParentTaskInfoType
