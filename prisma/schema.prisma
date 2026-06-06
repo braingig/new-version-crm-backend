@@ -99,6 +99,9 @@ model User {
   status        String      @default("ACTIVE")
   lastActive    DateTime?
   refreshToken  String?
+  googleRefreshToken String?
+  googleEmail   String?
+  googleConnectedAt DateTime?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
@@ -123,6 +126,7 @@ model User {
 
   taskAttachments    TaskAttachment[]
   projectAttachments ProjectAttachment[]
+  meetings           Meeting[]
 
   /// When set, this admin receives “task ready for review” notifications if they are in the configured reviewer list (or when the list is empty = all admins).
   taskReviewAdmin TaskReviewAdmin?
@@ -160,6 +164,7 @@ model Project {
   tasks     Task[]
   taskLists TaskList[]
   attachments ProjectAttachment[]
+  meetings  Meeting[]
 
   @@index([status])
   @@index([createdById])
@@ -441,4 +446,25 @@ model UserWorkInterval {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model Meeting {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  projectId   String?
+  startTime   DateTime
+  endTime     DateTime
+  location    String?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy User     @relation(fields: [createdById], references: [id])
+
+  @@index([projectId])
+  @@index([startTime])
+  @@index([endTime])
+  @@index([createdById])
 }

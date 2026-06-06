@@ -45,6 +45,16 @@ type CommentType {
   user: UserBasicType
 }
 
+input CreateMeetingInput {
+  description: String
+  endTime: DateTime!
+  generateMeetLink: Boolean = false
+  location: String
+  projectId: String
+  startTime: DateTime!
+  title: String!
+}
+
 input CreateNotificationInput {
   link: String
   message: String!
@@ -127,12 +137,50 @@ type EmployeeType {
   workType: WorkType
 }
 
+type GoogleCalendarStatusType {
+  connected: Boolean!
+  connectedAt: DateTime
+  googleEmail: String
+}
+
 """JSON scalar type"""
 scalar JSON
 
 input LoginInput {
   email: String!
   password: String!
+}
+
+input MeetingFiltersInput {
+  from: DateTime!
+  projectId: String
+  to: DateTime!
+}
+
+type MeetingProjectType {
+  id: String!
+  name: String!
+}
+
+type MeetingType {
+  createdAt: DateTime!
+  createdBy: MeetingUserType!
+  createdById: String!
+  description: String
+  endTime: DateTime!
+  id: String!
+  location: String
+  project: MeetingProjectType
+  projectId: String
+  startTime: DateTime!
+  title: String!
+  updatedAt: DateTime!
+}
+
+type MeetingUserType {
+  email: String!
+  id: String!
+  name: String!
 }
 
 type Mutation {
@@ -143,15 +191,18 @@ type Mutation {
   changeUserPassword(id: String!, newPassword: String!): Boolean!
   checkIn: TimesheetType!
   checkOut: TimesheetType!
+  createMeeting(input: CreateMeetingInput!): MeetingType!
   createNotification(input: CreateNotificationInput!): NotificationDto!
   createProject(input: CreateProjectInput!): ProjectType!
   createSale(input: CreateSaleInput!): Sale!
   createTask(input: CreateTaskInput!): TaskType!
   createTaskList(input: CreateTaskListInput!): TaskListType!
+  deleteMeeting(id: String!): Boolean!
   deleteProject(id: String!): Boolean!
   deleteTask(id: String!): Boolean!
   deleteTaskList(id: String!): Boolean!
   deleteUser(id: String!): Boolean!
+  disconnectGoogleCalendar: Boolean!
   generatePayroll(employeeId: String!, month: DateTime!): Boolean!
   login(input: LoginInput!): AuthResponse!
   logout: Boolean!
@@ -166,6 +217,7 @@ type Mutation {
   startTimeEntry(input: StartTimeEntryInput!): TimeEntryType!
   stopTimeEntry(effectiveDurationSeconds: Int): TimeEntryType!
   updateEmployeeWorkType(workType: String!): EmployeeType!
+  updateMeeting(id: String!, input: UpdateMeetingInput!): MeetingType!
   updateProject(id: String!, input: UpdateProjectInput!): ProjectType!
   updateTask(id: String!, input: UpdateTaskInput!): TaskType!
   updateTaskList(id: String!, input: UpdateTaskListInput!): TaskListType!
@@ -264,7 +316,10 @@ type Query {
   activeTimeEntry: TimeEntryType
   employeeDailyActivity(employeeId: String, endDate: DateTime!, startDate: DateTime!): [EmployeeDailyActivityType!]!
   employeeWorkType: WorkType
+  googleCalendarStatus: GoogleCalendarStatusType!
   me: UserType!
+  meeting(id: String!): MeetingType!
+  meetings(filters: MeetingFiltersInput!): [MeetingType!]!
   myTaskComments: [TaskCommentFeedType!]!
   myTaskMentions: [TaskMentionFeedType!]!
   notificationUnreadCount: Float!
@@ -482,6 +537,15 @@ type TimesheetType {
   status: TimesheetStatus!
   totalHours: Float!
   updatedAt: DateTime!
+}
+
+input UpdateMeetingInput {
+  description: String
+  endTime: DateTime
+  location: String
+  projectId: String
+  startTime: DateTime
+  title: String
 }
 
 input UpdateProjectInput {

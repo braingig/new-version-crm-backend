@@ -21,6 +21,8 @@ import { WorkScheduleModule } from './work-schedule/work-schedule.module';
 import { MailModule } from './mail/mail.module';
 import { TaskReviewAdminsModule } from './task-review-admins/task-review-admins.module';
 import { AttachmentsModule } from './attachments/attachments.module';
+import { MeetingsModule } from './meetings/meetings.module';
+import { GoogleModule } from './google/google.module';
 
 @Module({
     imports: [
@@ -58,6 +60,8 @@ import { AttachmentsModule } from './attachments/attachments.module';
         MailModule,
         TaskReviewAdminsModule,
         AttachmentsModule,
+        MeetingsModule,
+        GoogleModule,
     ],
 })
 export class AppModule { }

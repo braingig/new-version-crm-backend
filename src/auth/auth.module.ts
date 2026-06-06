@@ -25,6 +25,6 @@ import { TimesheetsModule } from '../timesheets/timesheets.module';
         TimesheetsModule,
     ],
     providers: [AuthService, AuthResolver, JwtStrategy],
-    exports: [AuthService, JwtStrategy, PassportModule],
+    exports: [AuthService, JwtStrategy, PassportModule, JwtModule],
 })
 export class AuthModule { }
