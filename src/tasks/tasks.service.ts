@@ -35,6 +35,33 @@ export class TasksService {
         return this.mail.getAppDisplayName();
     }
 
+    private readonly statusHistoryInclude = {
+        orderBy: { startedAt: 'asc' as const },
+        select: {
+            id: true,
+            status: true,
+            startedAt: true,
+            endedAt: true,
+        },
+    };
+
+    private async recordInitialStatusHistory(taskId: string, status: TaskStatus, startedAt: Date) {
+        await this.prisma.taskStatusHistory.create({
+            data: { taskId, status, startedAt },
+        });
+    }
+
+    private async transitionStatusHistory(taskId: string, newStatus: TaskStatus) {
+        const now = new Date();
+        await this.prisma.taskStatusHistory.updateMany({
+            where: { taskId, endedAt: null },
+            data: { endedAt: now },
+        });
+        await this.prisma.taskStatusHistory.create({
+            data: { taskId, status: newStatus, startedAt: now },
+        });
+    }
+
     private taskEmailContext(task: {
         id: string;
         title: string;
@@ -115,6 +142,7 @@ export class TasksService {
                 },
             },
         });
+        await this.recordInitialStatusHistory(task.id, task.status, task.createdAt);
         if (assigneeIds?.length) {
             await this.prisma.taskAssignee.createMany({
                 data: assigneeIds.map((uid) => ({ taskId: task.id, userId: uid })),
@@ -551,11 +579,13 @@ export class TasksService {
                         name: true,
                     },
                 },
+                statusHistory: this.statusHistoryInclude,
                 subTasks: myTasksMode
                     ? false
                     : {
                     include: {
                         project: { select: { id: true, name: true } },
+                        statusHistory: this.statusHistoryInclude,
                         assignedTo: {
                             select: {
                                 id: true,
@@ -577,6 +607,7 @@ export class TasksService {
                         subTasks: {
                             include: {
                                 project: { select: { id: true, name: true } },
+                                statusHistory: this.statusHistoryInclude,
                                 assignedTo: {
                                     select: {
                                         id: true,
@@ -806,7 +837,11 @@ export class TasksService {
                 );
             }
         }
-        if (updatedByUserId && existing) {
+        if (existing) {
+            if (existing.status !== updated.status) {
+                await this.transitionStatusHistory(id, updated.status);
+            }
+            if (updatedByUserId) {
             const changedFields = this.getActuallyChangedFields(existing, updated, previousAssigneeIds);
             this.notifyTaskUpdated(updated, updatedByUserId, changedFields);
             if (changedFields.includes('Status')) {
@@ -835,6 +870,7 @@ export class TasksService {
                     'task_field',
                     'note',
                 );
+            }
             }
         }
         await this.pruneStaleTaskMentionNotifications(id);

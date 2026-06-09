@@ -216,6 +216,7 @@ model Task {
   timeEntries     TimeEntry[]
   comments        Comment[]
   attachments     TaskAttachment[]
+  statusHistory   TaskStatusHistory[]
 
   @@index([projectId])
   @@index([assignedToId])
@@ -223,6 +224,20 @@ model Task {
   @@index([priority])
   @@index([parentTaskId])
   @@index([listId])
+}
+
+model TaskStatusHistory {
+  id        String     @id @default(uuid())
+  taskId    String
+  status    TaskStatus
+  startedAt DateTime   @default(now())
+  endedAt   DateTime?
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([startedAt])
+  @@index([endedAt])
 }
 
 model TaskAttachment {

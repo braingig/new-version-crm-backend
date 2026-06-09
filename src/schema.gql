@@ -463,6 +463,13 @@ enum TaskStatus {
   TODO
 }
 
+type TaskStatusHistoryType {
+  endedAt: DateTime
+  id: String!
+  startedAt: DateTime!
+  status: TaskStatus!
+}
+
 type TaskType {
   assignedTo: UserBasicType
   assignedToId: String
@@ -485,6 +492,7 @@ type TaskType {
   projectId: String!
   startDate: DateTime
   status: TaskStatus!
+  statusHistory: [TaskStatusHistoryType!]
   subTasks: [TaskType!]
   timeSpent: Float!
   title: String!

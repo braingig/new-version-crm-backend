@@ -265,6 +265,24 @@ export class TaskType {
 
     @Field()
     updatedAt: Date;
+
+    @Field(() => [TaskStatusHistoryType], { nullable: true })
+    statusHistory?: TaskStatusHistoryType[];
+}
+
+@ObjectType()
+export class TaskStatusHistoryType {
+    @Field()
+    id: string;
+
+    @Field(() => TaskStatus)
+    status: TaskStatus;
+
+    @Field()
+    startedAt: Date;
+
+    @Field({ nullable: true })
+    endedAt?: Date;
 }
 
 @ObjectType()
