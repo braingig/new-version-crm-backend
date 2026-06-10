@@ -46,6 +46,7 @@ type CommentType {
 }
 
 input CreateMeetingInput {
+  assigneeIds: [String!]
   description: String
   endTime: DateTime!
   generateMeetLink: Boolean = false
@@ -163,6 +164,7 @@ type MeetingProjectType {
 }
 
 type MeetingType {
+  assignees: [MeetingUserType!]!
   createdAt: DateTime!
   createdBy: MeetingUserType!
   createdById: String!
@@ -548,8 +550,10 @@ type TimesheetType {
 }
 
 input UpdateMeetingInput {
+  assigneeIds: [String!]
   description: String
   endTime: DateTime
+  generateMeetLink: Boolean = false
   location: String
   projectId: String
   startTime: DateTime

@@ -5,6 +5,7 @@ import {
     IsOptional,
     IsDate,
     IsBoolean,
+    IsArray,
 } from 'class-validator';
 
 @ObjectType()
@@ -65,6 +66,9 @@ export class MeetingType {
 
     @Field(() => MeetingUserType)
     createdBy: MeetingUserType;
+
+    @Field(() => [MeetingUserType])
+    assignees: MeetingUserType[];
 }
 
 @InputType()
@@ -101,6 +105,12 @@ export class CreateMeetingInput {
     @IsOptional()
     @IsBoolean()
     generateMeetLink?: boolean;
+
+    @Field(() => [String], { nullable: true })
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
+    assigneeIds?: string[];
 }
 
 @InputType()
@@ -134,6 +144,17 @@ export class UpdateMeetingInput {
     @IsOptional()
     @IsString()
     location?: string;
+
+    @Field({ nullable: true, defaultValue: false })
+    @IsOptional()
+    @IsBoolean()
+    generateMeetLink?: boolean;
+
+    @Field(() => [String], { nullable: true })
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
+    assigneeIds?: string[];
 }
 
 @InputType()

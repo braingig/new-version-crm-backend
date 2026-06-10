@@ -127,6 +127,7 @@ model User {
   taskAttachments    TaskAttachment[]
   projectAttachments ProjectAttachment[]
   meetings           Meeting[]
+  meetingAttendances MeetingAttendee[]
 
   /// When set, this admin receives “task ready for review” notifications if they are in the configured reviewer list (or when the list is empty = all admins).
   taskReviewAdmin TaskReviewAdmin?
@@ -477,9 +478,24 @@ model Meeting {
 
   project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   createdBy User     @relation(fields: [createdById], references: [id])
+  attendees MeetingAttendee[]
 
   @@index([projectId])
   @@index([startTime])
   @@index([endTime])
   @@index([createdById])
+}
+
+model MeetingAttendee {
+  id        String   @id @default(uuid())
+  meetingId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, userId])
+  @@index([meetingId])
+  @@index([userId])
 }
